@@ -1,4 +1,4 @@
-unit ThreadPool;
+unit Bittorrent.ThreadPool;
 
 interface
 
