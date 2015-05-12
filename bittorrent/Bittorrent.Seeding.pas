@@ -6,8 +6,8 @@ uses
   System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
   System.Math, System.DateUtils,
   Basic.UniString,
-  Bittorrent, Bittorrent.Bitfield, Bittorrent.Utils, BusyObj, Common.SortedList,
-  ThreadPool,
+  Bittorrent, Bittorrent.Bitfield, Bittorrent.Utils, Bittorrent.ThreadPool,
+  BusyObj, Common.SortedList,
   IdGlobal, IdStack;
 
 type

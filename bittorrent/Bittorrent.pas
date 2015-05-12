@@ -6,10 +6,9 @@ uses
   System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
   System.Classes, System.DateUtils,
   Basic.UniString, BusyObj, Bittorrent.Utils,
-  Bittorrent.Bitfield, Bittorrent.Server,
+  Bittorrent.Bitfield, Bittorrent.Server, Bittorrent.ThreadPool,
   AccurateTimer,
   IdIOHandler, IdGlobal, IdContext, IdSchedulerOfThreadPool,
-  ThreadPool,
   Spring.Collections;
 
 const

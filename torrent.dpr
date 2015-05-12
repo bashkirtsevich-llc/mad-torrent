@@ -4,7 +4,6 @@ uses
   Vcl.Forms,
   main_u in 'main_u.pas' {Form1},
   Basic.UniString in 'Basic.UniString.pas',
-  Basic.Bencoding in 'Basic.Bencoding.pas',
   IdIOHandlerHelper in 'IdIOHandlerHelper.pas',
   Common.SortedList in 'Common.SortedList.pas',
   BusyObj in 'BusyObj.pas',
@@ -24,7 +23,8 @@ uses
   Bittorrent.Server in 'bittorrent\Bittorrent.Server.pas',
   Bittorrent.Utils in 'bittorrent\Bittorrent.Utils.pas',
   AccurateTimer in 'AccurateTimer.pas',
-  Bittorrent.ThreadPool in 'bittorrent\Bittorrent.ThreadPool.pas';
+  Bittorrent.ThreadPool in 'bittorrent\Bittorrent.ThreadPool.pas',
+  Basic.Bencoding in 'Basic.Bencoding.pas';
 
 {$R *.res}
 

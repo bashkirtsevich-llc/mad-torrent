@@ -5,7 +5,8 @@ interface
 uses
   System.Classes, System.SysUtils, System.Generics.Collections, System.Math,
   Spring.Collections,
-  Bittorrent, Basic.UniString, Basic.Bencoding, Bittorrent.Utils;
+  Bittorrent, Bittorrent.Utils,
+  Basic.Bencoding, Basic.UniString;
 
 type
   TMetafile = class(TInterfacedObject, IMetaFile)

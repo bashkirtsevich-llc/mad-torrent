@@ -5,8 +5,8 @@ interface
 uses
   System.Classes, System.SysUtils, System.Generics.Defaults,
   Spring.Collections,
-  Basic.Bencoding,
-  Bittorrent, Basic.UniString, Common.SortedList,
+  Bittorrent, Basic.Bencoding, Basic.UniString,
+  Common.SortedList,
   IdGlobal;
 
 type

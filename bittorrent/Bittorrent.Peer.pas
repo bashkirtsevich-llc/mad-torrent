@@ -6,8 +6,8 @@ uses
   System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
   System.DateUtils,
   Spring.Collections,
-  Bittorrent, Bittorrent.Bitfield, Bittorrent.Utils, BusyObj, Basic.UniString,
-  ThreadPool,
+  Bittorrent, Bittorrent.Bitfield, Bittorrent.Utils, Bittorrent.ThreadPool,
+  BusyObj, Basic.UniString,
   IdGlobal, IdContext;
 
 type
