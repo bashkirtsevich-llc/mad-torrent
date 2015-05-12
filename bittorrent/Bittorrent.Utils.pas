@@ -5,42 +5,34 @@ interface
 uses
   Winapi.Windows,
   System.SysUtils, System.DateUtils,
-  Hash.SHA1, Basic.UniString;
+  Basic.UniString,
+  IdHMAC, IdHMACSHA1, IdGlobal;
 
-function SHA1DigestToUniString(const ADigest: TSHA1Digest): TUniString;
-function SHA1(AData: Pointer; ALength: Integer): TUniString; overload;
+function SHA1(const AData: TIdBytes): TUniString; overload;
 function SHA1(const Value: TUniString): TUniString; overload;
 function UtcNow: TDateTime;
 
 implementation
 
-function SHA1DigestToUniString(const ADigest: TSHA1Digest): TUniString;
+function SHA1(const AData: TIdBytes): TUniString; overload;
 var
-  i: Integer;
+  ctx: TIdHMAC;
 begin
-  Result.Len := SizeOf(TSHA1Digest);
-
-  for i := 0 to SizeOf(TSHA1Digest) do
-    Result[i] := ADigest[i];
-end;
-
-function SHA1(AData: Pointer; ALength: Integer): TUniString; overload;
-var
-  digest: TSHA1Digest;
-  ctx: TSHA1Context;
-begin
-  Result.Len := 0;
-
-  SHA1Init(ctx);
-  SHA1Update(ctx, AData^, ALength);
-  digest := SHA1Final(ctx);
-
-  Result := SHA1DigestToUniString(digest);
+  ctx := TIdHMACSHA1.Create;
+  try
+    Result := ctx.HashValue(AData);
+  finally
+    ctx.Free;
+  end;
 end;
 
 function SHA1(const Value: TUniString): TUniString; overload;
+var
+  buf: TIdBytes;
 begin
-  Result := SHA1(Value.DataPtr[0], Value.Len);
+  SetLength(buf, Value.Len);
+  Move(Value.DataPtr[0]^, buf[0], Value.Len);
+  Result := SHA1(buf);
 end;
 
 function UtcNow: TDateTime;
