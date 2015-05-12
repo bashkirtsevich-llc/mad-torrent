@@ -5,7 +5,6 @@ uses
   main_u in 'main_u.pas' {Form1},
   Basic.UniString in 'Basic.UniString.pas',
   Basic.Bencoding in 'Basic.Bencoding.pas',
-  Hash.SHA1 in 'Hash.SHA1.pas',
   ThreadPool in 'ThreadPool.pas',
   IdIOHandlerHelper in 'IdIOHandlerHelper.pas',
   Common.SortedList in 'Common.SortedList.pas',

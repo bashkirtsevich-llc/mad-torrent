@@ -91,7 +91,6 @@
         </DCCReference>
         <DCCReference Include="Basic.UniString.pas"/>
         <DCCReference Include="Basic.Bencoding.pas"/>
-        <DCCReference Include="Hash.SHA1.pas"/>
         <DCCReference Include="ThreadPool.pas"/>
         <DCCReference Include="IdIOHandlerHelper.pas"/>
         <DCCReference Include="Common.SortedList.pas"/>
