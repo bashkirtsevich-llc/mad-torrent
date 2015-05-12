@@ -18,12 +18,11 @@ type
     FBytesSend,
     FBytesReceived: UInt64;
 
-    //procedure OnConnectionConnected(Sender: TObject);
     procedure OnConnectionDiconnected(Sender: TObject);
 
     procedure Disconnect; inline;
 
-    procedure SendMessage(AMessage: IMessage);
+    procedure SendMessage(AMessage: IMessage); inline;
     function ReceiveMessage(AHandshake: Boolean = False): IMessage;
 
     function GetConnected: Boolean; inline;
@@ -32,7 +31,6 @@ type
     function GetBytesReceived: UInt64; inline;
     function GetOnDisconnect: TProc; inline;
     procedure SetOnDisconnect(Value: TProc); inline;
-    procedure OnConnectionWork(ASender: TObject; AWorkMode: TWorkMode; AWorkCount: Int64);
   protected
     FTCPConnection: TIdTCPConnection;
     FConnectionType: TConnectionType;
@@ -78,6 +76,7 @@ uses
 
 procedure TConnection.SendMessage(AMessage: IMessage);
 begin
+  Inc(FBytesSend, AMessage.MsgSize);
   AMessage.Send(FTCPConnection.IOHandler);
 end;
 
@@ -95,7 +94,6 @@ begin
 
   FTCPConnection := AConnection;
   FTCPConnection.OnDisconnected := OnConnectionDiconnected;
-  FTCPConnection.OnWork := OnConnectionWork; { если не заработает, то повесить на FTCPConnection.IOHandler }
 end;
 
 destructor TConnection.Destroy;
@@ -160,15 +158,6 @@ begin
     FOnDisconnect;
 end;
 
-procedure TConnection.OnConnectionWork(ASender: TObject;
-  AWorkMode: TWorkMode; AWorkCount: Int64);
-begin
-  case AWorkMode of
-    wmRead  : Inc(FBytesReceived, AWorkCount);
-    wmWrite : Inc(FBytesSend    , AWorkCount);
-  end;
-end;
-
 function TConnection.ReceiveMessage(AHandshake: Boolean): IMessage;
 begin
   // Readable -- достать из очереди очередной пакет (false, если ничего не удалось вытянуть)
@@ -182,6 +171,8 @@ begin
         Result := THandshakeMessage.CreateFromIOHandler(IOHandler) as IMessage
       else
         Result := TFixedMessage.ParseMessage(IOHandler) as IMessage;
+
+      Inc(FBytesReceived, Result.MsgSize);
     end else
       Result := nil;
 end;

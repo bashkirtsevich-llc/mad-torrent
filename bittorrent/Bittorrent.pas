@@ -22,7 +22,10 @@ type
   {$REGION 'Messages'}
   IMessage = interface // переименовать бы в IPersistentMessage
   ['{1737BD06-7CF1-4323-BC33-806EB060CD3D}']
+    function GetMsgSize: Integer;
     procedure Send(AIOHandler: TIdIOHandler);
+
+    property MsgSize: Integer read GetMsgSize;
   end;
 
   TFixedMessageID = (

@@ -14,6 +14,7 @@ type
   private
     procedure Send(AIOHandler: TIdIOHandler); inline;
   protected
+    function GetMsgSize: Integer; virtual; abstract;
     procedure ReadFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer); virtual; abstract;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); virtual; abstract;
   public
@@ -24,9 +25,9 @@ type
 
   TFixedMessage = class abstract(TMessage, IFixedMessage)
   private
-//    function GetPayloadSize: Integer; inline;
     function GetMessageID: TFixedMessageID; inline;
   protected
+    function GetMsgSize: Integer; override;
     function MessageLen: Integer; virtual;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); override;
   protected
@@ -186,6 +187,7 @@ type
     FDmmy: TUniString;
     function GetDummy: TUniString; inline;
   protected
+    function GetMsgSize: Integer; override;
     procedure ReadFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer); override;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); override;
   end;
@@ -220,6 +222,7 @@ type
     function GetSupportsExtendedMessaging: Boolean; inline;
     function GetSupportsFastPeer: Boolean; inline;
   protected
+    function GetMsgSize: Integer; override;
     procedure ReadFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer); override;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); override;
   public
@@ -280,8 +283,7 @@ end;
 
 function THaveMessage.MessageLen: Integer;
 begin
-  Result := inherited MessageLen;
-  Result := Result + FPieceIndex.Size;
+  Result := (inherited MessageLen) + FPieceIndex.Size;
 end;
 
 procedure THaveMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
@@ -317,8 +319,7 @@ end;
 
 function TBitfieldMessage.MessageLen: Integer;
 begin
-  Result := inherited MessageLen;
-  Result := Result + FBitfield.LengthInBytes;
+  Result := (inherited MessageLen) + FBitfield.LengthInBytes;
 end;
 
 procedure TBitfieldMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
@@ -371,8 +372,7 @@ end;
 
 function TRequestMessage.MessageLen: Integer;
 begin
-  Result := inherited MessageLen;
-  Result := Result + FPieceIndex.Size + FOffset.Size + FSize.Size;
+  Result := (inherited MessageLen) + FPieceIndex.Size + FOffset.Size + FSize.Size;
 end;
 
 procedure TRequestMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
@@ -429,9 +429,7 @@ end;
 
 function TPieceMessage.MessageLen: Integer;
 begin
-  Result := inherited MessageLen;
-
-  Result := Result + FPieceIndex.Size + FOffset.Size + FBlock.Len;
+  Result := (inherited MessageLen) + FPieceIndex.Size + FOffset.Size + FBlock.Len;
 end;
 
 procedure TPieceMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
@@ -499,8 +497,7 @@ end;
 
 function TCancelMessage.MessageLen: Integer;
 begin
-  Result := inherited MessageLen;
-  Result := Result + FPieceIndex.Size + FOffset.Size + FSize.Size;
+  Result := (inherited MessageLen) + FPieceIndex.Size + FOffset.Size + FSize.Size;
 end;
 
 procedure TCancelMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
@@ -540,8 +537,7 @@ end;
 
 function TPortMessage.MessageLen: Integer;
 begin
-  Result := inherited MessageLen;
-  Result := Result + FPort.Size;
+  Result := (inherited MessageLen) + FPort.Size;
 end;
 
 procedure TPortMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
@@ -596,6 +592,16 @@ begin
   Result := FInfoHash;
 end;
 
+function THandshakeMessage.GetMsgSize: Integer;
+begin
+  Result :=
+    Byte.Size +
+    ProtocolIdentifier.Length +
+    FFlags.Len +
+    FInfoHash.Len +
+    FPeerID.Len;
+end;
+
 function THandshakeMessage.GetPeerID: TUniString;
 begin
   Result := FPeerID;
@@ -620,29 +626,19 @@ procedure THandshakeMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
   AMsgSize: Integer);
 var
   i: Integer;
-  //buf1, buf2, buf3: TIdBytes;
   proto: string;
 begin
   with AIOHandler do
   begin
     { проверки правильности заполнения протокола }
     i := ReadByte;
-    Assert(i = Length(ProtocolIdentifier));
+    Assert(i = ProtocolIdentifier.Length);
 
     proto := ReadString(i);
     Assert(proto = ProtocolIdentifier);
-
     { достаем данные клиента }
-//    ReadBytes(buf1, FlagsLen);
-//    FFlags := buf1;
     ReadUniString(FlagsLen, FFlags);
-
-//    ReadBytes(buf2, 20);
-//    FInfoHash := buf2;
     ReadUniString(20, FInfoHash);
-
-//    ReadBytes(buf3, 20);
-//    FPeerID := buf3;
     ReadUniString(20, FPeerID);
   end;
 end;
@@ -651,7 +647,7 @@ procedure THandshakeMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
 begin
   with AIOHandler do
   begin
-    WriteByte(Length(ProtocolIdentifier));
+    WriteByte(ProtocolIdentifier.Length);
     WriteString(ProtocolIdentifier);
     WriteUniString(FFlags);
     WriteUniString(FInfoHash);
@@ -666,10 +662,10 @@ begin
   Result := ClassMessageID;
 end;
 
-//function TFixedMessage.GetPayloadSize: Integer;
-//begin
-//  Result := MessageLen;
-//end;
+function TFixedMessage.GetMsgSize: Integer;
+begin
+  Result := MessageLen;
+end;
 
 function TFixedMessage.MessageLen: Integer;
 begin
@@ -780,8 +776,7 @@ end;
 
 function TExtensionMessage.MessageLen: Integer;
 begin
-  Result := inherited MessageLen;
-  Result := Result + SizeOf(FMessageID) + FExtendedMsg.Size;
+  Result := (inherited MessageLen) + SizeOf(FMessageID) + FExtendedMsg.Size;
 end;
 
 procedure TExtensionMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
@@ -808,6 +803,11 @@ end;
 function TKeepAliveMessage.GetDummy: TUniString;
 begin
   Result := FDmmy;
+end;
+
+function TKeepAliveMessage.GetMsgSize: Integer;
+begin
+  Result := Byte.Size;
 end;
 
 procedure TKeepAliveMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
