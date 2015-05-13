@@ -1,0 +1,62 @@
+body {
+    padding-top: 15px;
+    background: #fafafa;
+}
+
+.panel-footer,
+.modal-footer {
+    text-align: left;
+}
+
+.progress {
+    margin-bottom: 5px;
+}
+
+.weak {
+    display: none;
+    color: #ff101a;
+}
+
+.mediocre {
+    display: none;
+    color: #4fbf2d;
+}
+
+.strong {
+    display: none;
+    color: #279003;
+}
+
+/* Fix radius of hidden fields. */
+.password input {
+    border-top-right-radius: 5px !important;
+    border-bottom-right-radius: 5px !important;
+}
+
+.message {
+    white-space: pre;
+    font-size: 18px;
+    overflow-x: scroll;
+}
+
+.hint {
+    white-space: pre;
+    overflow-x: hidden;
+    margin-bottom: 10px;
+}
+
+#send-url-link {
+    overflow: hidden;
+}
+
+.features td {
+    padding-right: 10px;
+}
+
+.features .glyphicon {
+    color: #279003;
+}
+
+.config-buttons {
+    margin-top: -5px;
+}

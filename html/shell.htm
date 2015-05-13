@@ -1,0 +1,117 @@
+<!doctype html>
+<html dir="/">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+    <title>%appname% &mdash; %appdescr%</title>
+
+    <link rel="icon" type="image/icon" href="images/favicon.ico">
+    <link rel="stylesheet" href="bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="stylesheets/styles.css">
+
+    <script src="javascripts/jquery.min.js"></script>
+    <script src="javascripts/jquery.autosize.min.js"></script>
+    <script src="javascripts/jquery.complexify.js"></script>
+    <script src="bootstrap/js/bootstrap.min.js"></script>
+    <script src="javascripts/app.js"></script>
+</head>
+<body>
+
+<div class="container-fluid panels">
+
+    <nav class="navbar navbar-default" role="navigation">
+        <!-- Brand and toggle get grouped for better mobile display -->
+        <div class="navbar-header">
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-ex1-collapse">
+                <span class="sr-only">Скрыть/Показать навигацию</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            <a class="navbar-brand" href="#">%appname%</a>
+        </div>
+
+        <!-- Collect the nav links, forms, and other content for toggling -->
+        <div class="collapse navbar-collapse navbar-ex1-collapse">
+            <ul class="nav navbar-nav navbar-default">
+                <li class="active"><a href="#catalogue">Каталог</a></li>
+                <li class="dropdown">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">Dropdown <b class="caret"></b></a>
+                    <ul class="dropdown-menu">
+                        <li><a href="#">Действие</a></li>
+                        <li><a href="#">Другое действие</a></li>
+                        <li><a href="#">Что-то еще</a></li>
+                        <li class="divider"></li>
+                        <li><a href="#">Отдельная ссылка</a></li>
+                        <li class="divider"></li>
+                        <li><a href="#">Еще одна отдельная ссылка</a></li>
+                    </ul>
+                </li>
+                <li><a href="#downloads"><span class="glyphicon glyphicon-cloud-download"></span> Загрузки</a></li>
+                <li><a href="#about">О проекте</a></li>
+
+            <form class="navbar-form navbar-left" role="search">
+                <div class="form-group">
+                    <input type="text" class="form-control" placeholder="Поиск…">
+                </div>
+                <button type="submit" class="btn btn-default"><span class="glyphicon glyphicon-search"></span> Поиск</button>
+            </form>
+
+            </ul>
+        </div>
+        <!-- /.navbar-collapse -->
+    </nav>
+
+    <div id="panel-downloads" class="panel panel-default">
+        <div class="panel-heading">Загрузки</div>
+        <div class="panel-body">
+            <p>Всяческая статистика.</p>
+        </div>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Header</th>
+                    <th>Header</th>
+                    <th>Header</th>
+                    <th>Header</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1,001</td>
+                    <td>Lorem</td>
+                    <td>ipsum</td>
+                    <td>dolor</td>
+                    <td>sit</td>
+                </tr>
+                <tr>
+                    <td>1,001</td>
+                    <td>Lorem</td>
+                    <td>ipsum</td>
+                    <td>dolor</td>
+                    <td>sit</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="panel-footer">
+            <p>Всякая11 статистика.</p>
+        </div>
+    </div>
+
+    <div id="panel-about" class="panel panel-primary">
+        <div class="panel-heading">О %appname%</div>
+        <div class="panel-body">
+            <p>
+            <strong>%appname%</strong> блаблабла.
+            </p>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>
