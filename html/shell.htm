@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="stylesheets/styles.css">
 
     <script src="javascripts/jquery.min.js"></script>
+    <script src="javascripts/jquery.flot.js"></script>
     <script src="javascripts/jquery.autosize.min.js"></script>
     <script src="javascripts/jquery.complexify.js"></script>
     <script src="bootstrap/js/bootstrap.min.js"></script>
@@ -107,18 +108,10 @@
         <div class="panel-body">
 
 			<div class="box-inner">
-				<div class="box-header well" data-original-title="">
-					<h2>Realtime</h2>
-					<div class="box-icon">
-					<a href="#" class="btn btn-setting btn-round btn-default"><i class="glyphicon glyphicon-cog"></i></a>
-					<a href="#" class="btn btn-minimize btn-round btn-default"><i class="glyphicon glyphicon-chevron-up"></i></a>
-					<a href="#" class="btn btn-close btn-round btn-default"><i class="glyphicon glyphicon-remove"></i></a>
-					</div>
-				</div>
-				<div class="box-content" style="display: block;">
-					<div id="realtimechart" style="height: 190px; padding: 0px; position: relative;"><canvas class="flot-base" width="474" height="190" style="direction: ltr; position: absolute; left: 0px; top: 0px; width: 474px; height: 190px;"></canvas><div class="flot-text" style="position: absolute; top: 0px; left: 0px; bottom: 0px; right: 0px; font-size: smaller; color: rgb(84, 84, 84);"><div class="flot-y-axis flot-y1-axis yAxis y1Axis" style="position: absolute; top: 0px; left: 0px; bottom: 0px; right: 0px; display: block;"><div class="flot-tick-label tickLabel" style="position: absolute; top: 173px; left: 14px; text-align: right;">0</div><div class="flot-tick-label tickLabel" style="position: absolute; top: 130px; left: 8px; text-align: right;">25</div><div class="flot-tick-label tickLabel" style="position: absolute; top: 87px; left: 8px; text-align: right;">50</div><div class="flot-tick-label tickLabel" style="position: absolute; top: 44px; left: 8px; text-align: right;">75</div><div class="flot-tick-label tickLabel" style="position: absolute; top: 1px; left: 2px; text-align: right;">100</div></div></div><canvas class="flot-overlay" width="474" height="190" style="direction: ltr; position: absolute; left: 0px; top: 0px; width: 474px; height: 190px;"></canvas></div>
-					<p>Time between updates: <input id="updateInterval" type="text" value="" style="text-align: right; width:5em"> milliseconds</p>
-				</div>
+                <div id="realtimechart" class="box-header well" style="height: 900px; padding: 100px; position: relative;"></div>
+
+                <input id="updateInterval" type="text" value="" style="text-align: right">
+                <script src="javascripts/init-chart.js"></script>
 			</div>
 		
             <p>
