@@ -21,7 +21,7 @@ type
 
     procedure GetPeers(const AInfoHash: TUniString);
     procedure Announce(const AInfoHash: TUniString; APort: TIdPort;
-      AAnnounceTime: Integer { через сколько минут анонсить });
+      AAnnounceTime: Integer = 0{ через сколько минут анонсить });
 
     property OnPeersFound: TProc<TUniString, IList<IPeer>> read GetOnPeersFound write SetOnPeersFound;
     property OnItemProcessed: TProc<TUniString, Boolean, TIdPort> read GetOnItemProcessed write SetOnItemProcessed;
@@ -61,6 +61,7 @@ type
           ATime: TDateTime; APort: TIdPort);
       end;
   private
+    FThreads: TThreadPool;
     FDHTListener: TDHTListener;
     FDHTEngine: TDHTEngine;
     FQueue: TList<IDHTItem>;
@@ -82,10 +83,9 @@ type
 
     procedure GetPeers(const AInfoHash: TUniString);
     procedure Announce(const AInfoHash: TUniString; APort: TIdPort;
-      AAnnounceTime: Integer);
+      AAnnounceTime: Integer = 0);
   public
-    constructor Create(APool: TThreadPool; AListenPort: TIdPort;
-      const ALocalID: TUniString);
+    constructor Create(const ALocalID: TUniString; AListenPort: TIdPort);
     destructor Destroy; override;
   end;
 
@@ -94,7 +94,7 @@ implementation
 { TDHT }
 
 procedure TDHT.Announce(const AInfoHash: TUniString; APort: TIdPort;
-  AAnnounceTime: Integer);
+  AAnnounceTime: Integer = 0);
 var
   it: IDHTItem;
 begin
@@ -112,17 +112,17 @@ begin
   end;
 end;
 
-constructor TDHT.Create(APool: TThreadPool; AListenPort: TIdPort;
-  const ALocalID: TUniString);
+constructor TDHT.Create(const ALocalID: TUniString; AListenPort: TIdPort);
 begin
   inherited Create;
 
+  FThreads      := TThreadPool.Create;
   FQueue        := TList<IDHTItem>.Create;
   FLastItem     := nil;
   FLock         := TObject.Create;
 
   FDHTListener  := TDHTListener.Create(AListenPort);
-  FDHTEngine    := TDHTEngine.Create(APool, FDHTListener, ALocalID);
+  FDHTEngine    := TDHTEngine.Create(FThreads, FDHTListener, ALocalID);
   {$IFDEF PUBL_UTIL}
   FDHTEngine.TimeOut := TTimeSpan.FromSeconds(1);
   {$ENDIF}
@@ -136,6 +136,7 @@ begin
   FDHTListener.Free;
   FQueue.Free;
   FLock.Free;
+  FThreads.Free;
 
   inherited;
 end;
