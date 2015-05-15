@@ -4,11 +4,11 @@ interface
 
 uses
   System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
-  System.Classes, System.DateUtils,
+  System.Classes, System.DateUtils, System.TimeSpan,
   Basic.UniString, BusyObj, Bittorrent.Utils,
   Bittorrent.Bitfield, Bittorrent.Server, Bittorrent.ThreadPool,
   AccurateTimer,
-  IdIOHandler, IdGlobal, IdContext, IdSchedulerOfThreadPool,
+  IdIOHandler, IdGlobal, IdContext, IdSchedulerOfThreadPool, IdURI,
   Spring.Collections;
 
 const
@@ -314,15 +314,50 @@ type
     property OnException: TProc<IPeer, Exception> read GetOnException write SetOnException;
   end;
 
-  IFileItem = interface
-  ['{D93D9C1C-C709-4D53-BC9C-864C7A31A802}']
-    function GetFilePath: string;
-    function GetFileSize: UInt64;
-    function GetFileOffset: UInt64;
+  TTrackerState = (tsOK, tsOffline, tsInvalidResponse);
 
-    property FilePath: string read GetFilePath; { путь }
-    property FileSize: UInt64 read GetFileSize; { размер }
-    property FileOffset: UInt64 read GetFileOffset; { абсолютное смещение в общем потоке }
+  ITracker = interface
+  ['{74F77C52-9B65-4C89-9904-43389340430A}']
+    function GetCanAnnounce: Boolean;
+    function GetCanScrape: Boolean;
+    function GetComplete: Integer;
+    function GetDownloaded: Integer;
+    function GetFailureMessage: string;
+    function GetIncomplete: Integer;
+    function GetMinUpdateInterval: TTimeSpan;
+    function GetStatus: TTrackerState;
+    function GetUpdateInterval: TTimeSpan;
+    function GetURI: TIdURI;
+    function GetWarningMessage: string;
+
+    function GetBeforeAnnounce: TProc<ITracker>;
+    procedure SetBeforeAnnounce(Value: TProc<ITracker>);
+//    function GetAnnounceComplete: TProc<ITracker, IAnnounceResponseEventArgs>;
+//    procedure SetAnnounceComplete(Value: TProc<ITracker, IAnnounceResponseEventArgs>);
+    function GetBeforeScrape: TProc<ITracker>;
+    procedure SetBeforeScrape(Value: TProc<ITracker>);
+//    function GetAnnounceComplete: TProc<ITracker, IScrapeResponseEventArgs>;
+//    procedure SetAnnounceComplete(Value: TProc<ITracker, IScrapeResponseEventArgs>);
+
+    property CanAnnounce: Boolean read GetCanAnnounce;
+    property CanScrape: Boolean read GetCanScrape;
+    property Complete: Integer read GetComplete;
+    property Downloaded: Integer read GetDownloaded;
+    property FailureMessage: string read GetFailureMessage;
+    property Incomplete: Integer read GetIncomplete;
+    property MinUpdateInterval: TTimeSpan read GetMinUpdateInterval;
+    property Status: TTrackerState read GetStatus;
+    property UpdateInterval: TTimeSpan read GetUpdateInterval;
+    property URI: TIdURI read GetURI;
+    property WarningMessage: string read GetWarningMessage;
+
+    property BeforeAnnounce: TProc<ITracker> read GetBeforeAnnounce write SetBeforeAnnounce;
+//    property AnnounceComplete: TProc<ITracker, IAnnounceResponseEventArgs> read GetAnnounceComplete write SetAnnounceComplete;
+    property BeforeScrape: TProc<ITracker> read GetBeforeScrape write SetBeforeScrape;
+//    property ScrapeComplete: TProc<ITracker, IScrapeResponseEventArgs> read GetAnnounceComplete write SetAnnounceComplete;
+
+//    procedure Announce(AParameters: IAnnounceParameters; AState: Tobject);
+//    procedure Scrape(AParameters: IScrapeParameters; AState: Tobject);
   end;
 
   IMagnetURI = interface
@@ -336,6 +371,17 @@ type
     property DisplayName: string read GetDisplayName;
     property Trackers: TList<string> read GetTrackers;
     property WebSeeds: TList<string> read GetWebSeeds;
+  end;
+
+  IFileItem = interface
+  ['{D93D9C1C-C709-4D53-BC9C-864C7A31A802}']
+    function GetFilePath: string;
+    function GetFileSize: UInt64;
+    function GetFileOffset: UInt64;
+
+    property FilePath: string read GetFilePath; { путь }
+    property FileSize: UInt64 read GetFileSize; { размер }
+    property FileOffset: UInt64 read GetFileOffset; { абсолютное смещение в общем потоке }
   end;
 
   IMetaFile = interface
@@ -458,8 +504,8 @@ type
     FTerminated: Boolean;
     FLock: TObject;
     FListener: TTCPServer;
-    FBlackListTime: Integer;
-    FBlackListCounter: Integer;
+    FBlackListTime: Integer; // span
+    FBlackListCounter: Integer; // избавиться бы от этого
     FBlackList: TDictionary<string, TDateTime>;
     FOnConnectIncoming: TProc<IPeer, TUniString>;
 

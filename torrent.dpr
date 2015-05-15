@@ -24,7 +24,8 @@ uses
   Bittorrent.Utils in 'bittorrent\Bittorrent.Utils.pas',
   AccurateTimer in 'AccurateTimer.pas',
   Bittorrent.ThreadPool in 'bittorrent\Bittorrent.ThreadPool.pas',
-  Basic.Bencoding in 'Basic.Bencoding.pas';
+  Basic.Bencoding in 'Basic.Bencoding.pas',
+  Bittorrent.Tracker in 'bittorrent\Bittorrent.Tracker.pas';
 
 {$R *.res}
 
