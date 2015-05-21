@@ -8,8 +8,9 @@ uses
   Basic.UniString, BusyObj, Bittorrent.Utils,
   Bittorrent.Bitfield, Bittorrent.Server, Bittorrent.ThreadPool,
   AccurateTimer,
-  IdIOHandler, IdGlobal, IdContext, IdSchedulerOfThreadPool, IdURI,
-  Spring.Collections;
+  IdIOHandler, IdGlobal, IdContext, IdSchedulerOfThreadPool,
+  Spring.Collections,
+  Network.URI;
 
 const
   DefaultPeerID           = '-MD0001-MADMADMAMMAD'; // in handshake
@@ -314,52 +315,6 @@ type
     property OnException: TProc<IPeer, Exception> read GetOnException write SetOnException;
   end;
 
-  TTrackerState = (tsOK, tsOffline, tsInvalidResponse);
-
-  ITracker = interface
-  ['{74F77C52-9B65-4C89-9904-43389340430A}']
-    function GetCanAnnounce: Boolean;
-    function GetCanScrape: Boolean;
-    function GetComplete: Integer;
-    function GetDownloaded: Integer;
-    function GetFailureMessage: string;
-    function GetIncomplete: Integer;
-    function GetMinUpdateInterval: TTimeSpan;
-    function GetStatus: TTrackerState;
-    function GetUpdateInterval: TTimeSpan;
-    function GetURI: TIdURI;
-    function GetWarningMessage: string;
-
-    function GetBeforeAnnounce: TProc<ITracker>;
-    procedure SetBeforeAnnounce(Value: TProc<ITracker>);
-//    function GetAnnounceComplete: TProc<ITracker, IAnnounceResponseEventArgs>;
-//    procedure SetAnnounceComplete(Value: TProc<ITracker, IAnnounceResponseEventArgs>);
-    function GetBeforeScrape: TProc<ITracker>;
-    procedure SetBeforeScrape(Value: TProc<ITracker>);
-//    function GetAnnounceComplete: TProc<ITracker, IScrapeResponseEventArgs>;
-//    procedure SetAnnounceComplete(Value: TProc<ITracker, IScrapeResponseEventArgs>);
-
-    property CanAnnounce: Boolean read GetCanAnnounce;
-    property CanScrape: Boolean read GetCanScrape;
-    property Complete: Integer read GetComplete;
-    property Downloaded: Integer read GetDownloaded;
-    property FailureMessage: string read GetFailureMessage;
-    property Incomplete: Integer read GetIncomplete;
-    property MinUpdateInterval: TTimeSpan read GetMinUpdateInterval;
-    property Status: TTrackerState read GetStatus;
-    property UpdateInterval: TTimeSpan read GetUpdateInterval;
-    property URI: TIdURI read GetURI;
-    property WarningMessage: string read GetWarningMessage;
-
-    property BeforeAnnounce: TProc<ITracker> read GetBeforeAnnounce write SetBeforeAnnounce;
-//    property AnnounceComplete: TProc<ITracker, IAnnounceResponseEventArgs> read GetAnnounceComplete write SetAnnounceComplete;
-    property BeforeScrape: TProc<ITracker> read GetBeforeScrape write SetBeforeScrape;
-//    property ScrapeComplete: TProc<ITracker, IScrapeResponseEventArgs> read GetAnnounceComplete write SetAnnounceComplete;
-
-//    procedure Announce(AParameters: IAnnounceParameters; AState: Tobject);
-//    procedure Scrape(AParameters: IScrapeParameters; AState: Tobject);
-  end;
-
   IMagnetURI = interface
   ['{C90069A3-FA2D-41DE-897A-09868B542325}']
     function GetInfoHash: TUniString;
@@ -460,6 +415,85 @@ type
   TSeedingState = (ssUnknown, ssHaveMetadata, ssActive, ssChecking, ssRetracking,
     ssDownloading, ssPaused, ssSeeding, ssCompleted, ssError, ssCorrupted);
   TSeedingStates = set of TSeedingState;
+
+  // должен быть мутабельным
+  IAnnounceParameters = interface
+  ['{D9252FB3-ED9E-4733-895A-81CA2E71F54C}']
+    function GetBytesDownloaded: UInt64;
+    function GetBytesLeft: UInt64;
+    function GetBytesUploaded: UInt64;
+    function GetSeedingState: TSeedingState;
+    function GetInfoHash: TUniString;
+    function GetIPAddress: string;
+    function GetPeerID: TUniString;
+    function GetPort: TIdPort;
+    function GetRequireEncryption: Boolean;
+    function GetSupportsEncryption: Boolean;
+
+    property BytesDownloaded: UInt64 read GetBytesDownloaded;
+    property BytesLeft: UInt64 read GetBytesLeft;
+    property BytesUploaded: UInt64 read GetBytesUploaded;
+    property SeedingState: TSeedingState read GetSeedingState;
+    property InfoHash: TUniString read GetInfoHash;
+    property IPAddress: string read GetIPAddress;
+    property PeerID: TUniString read GetPeerID;
+    property Port: TIdPort read GetPort;
+    property RequireEncryption: Boolean read GetRequireEncryption;
+    property SupportsEncryption: Boolean read GetSupportsEncryption;
+  end;
+
+  IScrapeParameters = interface
+  ['{C159B7B8-014F-4B33-9BEF-AC9639E377D7}']
+    function GetInfoHash: TUniString;
+
+    property InfoHash: TUniString read GetInfoHash;
+  end;
+
+  TTrackerState = (tsOK, tsOffline, tsInvalidResponse);
+
+  ITracker = interface
+  ['{74F77C52-9B65-4C89-9904-43389340430A}']
+    function GetCanAnnounce: Boolean;
+    function GetCanScrape: Boolean;
+    function GetComplete: Integer;
+    function GetDownloaded: Integer;
+    function GetFailureMessage: string;
+    function GetIncomplete: Integer;
+    function GetMinUpdateInterval: TTimeSpan;
+    function GetStatus: TTrackerState;
+    function GetUpdateInterval: TTimeSpan;
+    function GetURI: IURI;
+    function GetWarningMessage: string;
+
+    function GetBeforeAnnounce: TProc<ITracker>;
+    procedure SetBeforeAnnounce(Value: TProc<ITracker>);
+//    function GetAnnounceComplete: TProc<ITracker, IAnnounceResponseEventArgs>;
+//    procedure SetAnnounceComplete(Value: TProc<ITracker, IAnnounceResponseEventArgs>);
+    function GetBeforeScrape: TProc<ITracker>;
+    procedure SetBeforeScrape(Value: TProc<ITracker>);
+//    function GetAnnounceComplete: TProc<ITracker, IScrapeResponseEventArgs>;
+//    procedure SetAnnounceComplete(Value: TProc<ITracker, IScrapeResponseEventArgs>);
+
+    property CanAnnounce: Boolean read GetCanAnnounce;
+    property CanScrape: Boolean read GetCanScrape;
+    property Complete: Integer read GetComplete;
+    property Downloaded: Integer read GetDownloaded;
+    property FailureMessage: string read GetFailureMessage;
+    property Incomplete: Integer read GetIncomplete;
+    property MinUpdateInterval: TTimeSpan read GetMinUpdateInterval;
+    property Status: TTrackerState read GetStatus;
+    property UpdateInterval: TTimeSpan read GetUpdateInterval;
+    property URI: IURI read GetURI;
+    property WarningMessage: string read GetWarningMessage;
+
+    property BeforeAnnounce: TProc<ITracker> read GetBeforeAnnounce write SetBeforeAnnounce;
+//    property AnnounceComplete: TProc<ITracker, IAnnounceResponseEventArgs> read GetAnnounceComplete write SetAnnounceComplete;
+    property BeforeScrape: TProc<ITracker> read GetBeforeScrape write SetBeforeScrape;
+//    property ScrapeComplete: TProc<ITracker, IScrapeResponseEventArgs> read GetAnnounceComplete write SetAnnounceComplete;
+
+//    procedure Announce(AParameters: IAnnounceParameters; AState: Tobject);
+//    procedure Scrape(AParameters: IScrapeParameters; AState: Tobject);
+  end;
 
   ISeeding = interface(IBusy) { раздача, она же и закачка }
   ['{A428EA0C-EF82-4A67-9F74-DF22EC858D20}']

@@ -5,7 +5,7 @@ interface
 uses
   System.Classes, System.SysUtils, System.TimeSpan,
   Bittorrent,
-  IdURI;
+  Network.URI;
 
 type
   TTracker = class abstract(TInterfacedObject, ITracker)
@@ -19,7 +19,7 @@ type
     FMinUpdateInterval: TTimeSpan;
     FStatus: TTrackerState;
     FUpdateInterval: TTimeSpan;
-    FURI: TIdURI;
+    FURI: IURI;
     FWarningMessage: string;
 
     FBeforeAnnounce: TProc<ITracker>;
@@ -36,7 +36,7 @@ type
     function GetMinUpdateInterval: TTimeSpan; inline;
     function GetStatus: TTrackerState; inline;
     function GetUpdateInterval: TTimeSpan; inline;
-    function GetURI: TIdURI; inline;
+    function GetURI: IURI; inline;
     function GetWarningMessage: string; inline;
 
     function GetBeforeAnnounce: TProc<ITracker>; inline;
@@ -47,18 +47,26 @@ type
     procedure SetBeforeScrape(Value: TProc<ITracker>); inline;
 //    function GetAnnounceComplete: TProc<ITracker, IScrapeResponseEventArgs>; inline;
 //    procedure SetAnnounceComplete(Value: TProc<ITracker, IScrapeResponseEventArgs>); inline;
-
   protected
-//    procedure Announce(AParameters: IAnnounceParameters; AState: Tobject); virtual; abstract;
-//    procedure Scrape(AParameters: IScrapeParameters; AState: Tobject); virtual; abstract;
-//    procedure RaiseBeforeAnnounce; virtual;
+    procedure Announce(AParameters: IAnnounceParameters; AState: TObject); virtual; abstract;
+    procedure Scrape(AParameters: IScrapeParameters; AState: TObject); virtual; abstract;
+    procedure RaiseBeforeAnnounce; virtual;
   public
-
+    constructor Create(AURI: IURI);
   end;
 
 implementation
 
 { TTracker }
+
+constructor TTracker.Create(AURI: IURI);
+begin
+  inherited Create;
+
+  FMinUpdateInterval := TTimeSpan.FromMinutes(3);
+  FUpdateInterval := TTimeSpan.FromMinutes(30);
+  FURI := AURI;
+end;
 
 function TTracker.GetBeforeAnnounce: TProc<ITracker>;
 begin
@@ -115,7 +123,7 @@ begin
   Result := FUpdateInterval;
 end;
 
-function TTracker.GetURI: TIdURI;
+function TTracker.GetURI: IURI;
 begin
   Result := FURI;
 end;
@@ -123,6 +131,12 @@ end;
 function TTracker.GetWarningMessage: string;
 begin
   Result := FWarningMessage;
+end;
+
+procedure TTracker.RaiseBeforeAnnounce;
+begin
+  if Assigned(FBeforeAnnounce) then
+    FBeforeAnnounce(Self);
 end;
 
 procedure TTracker.SetBeforeAnnounce(Value: TProc<ITracker>);
