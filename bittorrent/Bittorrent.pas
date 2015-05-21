@@ -495,6 +495,15 @@ type
 //    procedure Scrape(AParameters: IScrapeParameters; AState: Tobject);
   end;
 
+  IHTTPTracker = interface(ITracker)
+  ['{D739BF21-0953-4427-816A-49E1E5AD2DA8}']
+    function GetKey: string;
+    function GetScrapeURI: IURI;
+
+    property Key: string read GetKey;
+    property ScrapeURI: IURI read GetScrapeURI;
+  end;
+
   ISeeding = interface(IBusy) { раздача, она же и закачка }
   ['{A428EA0C-EF82-4A67-9F74-DF22EC858D20}']
     function GetLastRequest: TDateTime;

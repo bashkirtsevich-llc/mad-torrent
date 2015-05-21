@@ -3,8 +3,9 @@
 interface
 
 uses
-  System.Classes, System.SysUtils, System.TimeSpan,
+  System.Classes, System.SysUtils, System.TimeSpan, System.StrUtils,
   Bittorrent,
+  Basic.UniString,
   Network.URI;
 
 type
@@ -53,6 +54,21 @@ type
     procedure RaiseBeforeAnnounce; virtual;
   public
     constructor Create(AURI: IURI);
+  end;
+
+  THTTPTracker = class(TTracker, IHTTPTracker)
+  private
+    const
+      RequestTimeout = 10; // seconds
+  private
+    FScrapeURI: IURI;
+    FKey: string;
+    FTrackerID: TUniString;
+
+    function GetKey: string; inline;
+    function GetScrapeURI: IURI; inline;
+  public
+    constructor Create(AAnnounceURI: IURI);
   end;
 
 implementation
@@ -147,6 +163,30 @@ end;
 procedure TTracker.SetBeforeScrape(Value: TProc<ITracker>);
 begin
   FBeforeScrape := Value;
+end;
+
+{ THTTPTracker }
+
+constructor THTTPTracker.Create(AAnnounceURI: IURI);
+var
+  index: Integer;
+  part: string;
+begin
+  inherited Create(AAnnounceURI);
+
+  //SetCanAnnounce(True);
+  index := AAnnounceURI.URI.LastIndexOf('/');
+  //part := (index + 9 <= announceUrl.OriginalString.Length) ? announceUrl.OriginalString.Substring(index + 1, 8) : "";
+end;
+
+function THTTPTracker.GetKey: string;
+begin
+  Result := FKey;
+end;
+
+function THTTPTracker.GetScrapeURI: IURI;
+begin
+  Result := FScrapeURI;
 end;
 
 end.
