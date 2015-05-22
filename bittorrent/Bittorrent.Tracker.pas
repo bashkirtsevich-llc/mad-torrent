@@ -6,187 +6,143 @@ uses
   System.Classes, System.SysUtils, System.TimeSpan, System.StrUtils,
   Bittorrent,
   Basic.UniString,
-  Network.URI;
+  IdHTTP, IdURI;
 
 type
   TTracker = class abstract(TInterfacedObject, ITracker)
   private
-    FCanAnnounce: Boolean;
-    FCanScrape: Boolean;
-    FComplete: Integer;
-    FDownloaded: Integer;
-    FFailureMessage: string;
-    FIncomplete: Integer;
-    FMinUpdateInterval: TTimeSpan;
-    FStatus: TTrackerState;
-    FUpdateInterval: TTimeSpan;
-    FURI: IURI;
-    FWarningMessage: string;
+    FInfoHash: TUniString;
+    FAnnounceURL: string;
+    FScrapeURL: string;
+    FTrackerResponse: TTrackerResponse;
+    FTrackerResponseText: string;
 
-    FBeforeAnnounce: TProc<ITracker>;
-//    FAnnounceComplete: TProc<ITracker, IAnnounceResponseEventArgs>;
-    FBeforeScrape: TProc<ITracker>;
-//    FScrapeComplete: TProc<ITracker, IScrapeResponseEventArgs>;
-
+    function GetInfoHash: TUniString; inline;
+    function GetAnnounceURL: string; inline;
+    function GetScrapeURL: string; inline;
     function GetCanAnnounce: Boolean; inline;
     function GetCanScrape: Boolean; inline;
-    function GetComplete: Integer; inline;
-    function GetDownloaded: Integer; inline;
-    function GetFailureMessage: string; inline;
-    function GetIncomplete: Integer; inline;
-    function GetMinUpdateInterval: TTimeSpan; inline;
-    function GetStatus: TTrackerState; inline;
-    function GetUpdateInterval: TTimeSpan; inline;
-    function GetURI: IURI; inline;
-    function GetWarningMessage: string; inline;
-
-    function GetBeforeAnnounce: TProc<ITracker>; inline;
-    procedure SetBeforeAnnounce(Value: TProc<ITracker>); inline;
-//    function GetAnnounceComplete: TProc<ITracker, IAnnounceResponseEventArgs>; inline;
-//    procedure SetAnnounceComplete(Value: TProc<ITracker, IAnnounceResponseEventArgs>); inline;
-    function GetBeforeScrape: TProc<ITracker>; inline;
-    procedure SetBeforeScrape(Value: TProc<ITracker>); inline;
-//    function GetAnnounceComplete: TProc<ITracker, IScrapeResponseEventArgs>; inline;
-//    procedure SetAnnounceComplete(Value: TProc<ITracker, IScrapeResponseEventArgs>); inline;
+    function GetTrackerResponse: TTrackerResponse; inline;
+    function GetTrackerResponseText: string; inline;
   protected
-    procedure Announce(AParameters: IAnnounceParameters; AState: TObject); virtual; abstract;
-    procedure Scrape(AParameters: IScrapeParameters; AState: TObject); virtual; abstract;
-    procedure RaiseBeforeAnnounce; virtual;
+    procedure Announce; virtual; abstract;
+    procedure Scrape; virtual; abstract;
   public
-    constructor Create(AURI: IURI);
+    constructor Create(const AInfoHash: TUniString; const ATrackerURL: string);
   end;
 
-  THTTPTracker = class(TTracker, IHTTPTracker)
+  THTTPTracker = class(TTracker)
   private
-    const
-      RequestTimeout = 10; // seconds
-  private
-    FScrapeURI: IURI;
-    FKey: string;
-    FTrackerID: TUniString;
-
-    function GetKey: string; inline;
-    function GetScrapeURI: IURI; inline;
+    FHTTP: TIdHTTP;
+  protected
+    procedure Announce; override;
   public
-    constructor Create(AAnnounceURI: IURI);
+    constructor Create(const AInfoHash: TUniString; const ATrackerURL: string);
+    destructor Destroy; override;
   end;
 
 implementation
 
 { TTracker }
 
-constructor TTracker.Create(AURI: IURI);
+constructor TTracker.Create(const AInfoHash: TUniString; const ATrackerURL: string);
+var
+  i: Integer;
+  s: string;
 begin
   inherited Create;
 
-  FMinUpdateInterval := TTimeSpan.FromMinutes(3);
-  FUpdateInterval := TTimeSpan.FromMinutes(30);
-  FURI := AURI;
+  FInfoHash.Assign(AInfoHash);
+  FAnnounceURL := ATrackerURL;
+
+  i := ATrackerURL.LastIndexOf('/');
+  s := System.StrUtils.IfThen(i + 9 <= ATrackerURL.Length, ATrackerURL.Substring(i + 1, 8));
+  if s.ToLower = 'announce' then
+    FScrapeURL := ATrackerURL.Substring(1, i) + 'scrape' + ATrackerURL.Substring(i + 9, ATrackerURL.Length - i - 9);
 end;
 
-function TTracker.GetBeforeAnnounce: TProc<ITracker>;
+function TTracker.GetAnnounceURL: string;
 begin
-  Result := FBeforeAnnounce;
-end;
-
-function TTracker.GetBeforeScrape: TProc<ITracker>;
-begin
-  Result := FBeforeScrape;
+  Result := FAnnounceURL;
 end;
 
 function TTracker.GetCanAnnounce: Boolean;
 begin
-  Result := FCanAnnounce;
+  Result := not FAnnounceURL.IsEmpty {and interval...};
 end;
 
 function TTracker.GetCanScrape: Boolean;
 begin
-  Result := FCanScrape;
+  Result := not FScrapeURL.IsEmpty {and interval...};
 end;
 
-function TTracker.GetComplete: Integer;
+function TTracker.GetInfoHash: TUniString;
 begin
-  Result := FComplete;
+  Result := FInfoHash;
 end;
 
-function TTracker.GetDownloaded: Integer;
+function TTracker.GetScrapeURL: string;
 begin
-  Result := FDownloaded;
+  Result := FScrapeURL;
 end;
 
-function TTracker.GetFailureMessage: string;
+function TTracker.GetTrackerResponse: TTrackerResponse;
 begin
-  Result := FFailureMessage;
+  Result := FTrackerResponse;
 end;
 
-function TTracker.GetIncomplete: Integer;
+function TTracker.GetTrackerResponseText: string;
 begin
-  Result := FIncomplete;
-end;
-
-function TTracker.GetMinUpdateInterval: TTimeSpan;
-begin
-  Result := FMinUpdateInterval;
-end;
-
-function TTracker.GetStatus: TTrackerState;
-begin
-  Result := FStatus;
-end;
-
-function TTracker.GetUpdateInterval: TTimeSpan;
-begin
-  Result := FUpdateInterval;
-end;
-
-function TTracker.GetURI: IURI;
-begin
-  Result := FURI;
-end;
-
-function TTracker.GetWarningMessage: string;
-begin
-  Result := FWarningMessage;
-end;
-
-procedure TTracker.RaiseBeforeAnnounce;
-begin
-  if Assigned(FBeforeAnnounce) then
-    FBeforeAnnounce(Self);
-end;
-
-procedure TTracker.SetBeforeAnnounce(Value: TProc<ITracker>);
-begin
-  FBeforeAnnounce := Value;
-end;
-
-procedure TTracker.SetBeforeScrape(Value: TProc<ITracker>);
-begin
-  FBeforeScrape := Value;
+  Result := FTrackerResponseText;
 end;
 
 { THTTPTracker }
 
-constructor THTTPTracker.Create(AAnnounceURI: IURI);
+procedure THTTPTracker.Announce;
 var
-  index: Integer;
-  part: string;
+  sb: TStringBuilder;
 begin
-  inherited Create(AAnnounceURI);
+  Assert(GetCanAnnounce);
 
-  //SetCanAnnounce(True);
-  index := AAnnounceURI.URI.LastIndexOf('/');
-  //part := (index + 9 <= announceUrl.OriginalString.Length) ? announceUrl.OriginalString.Substring(index + 1, 8) : "";
+  sb := TStringBuilder.Create(FAnnounceURL);
+  try
+{ http://tracker.ru/announce
+    ?info_hash=%1a%93%87s%26r%0d%a9%e6%89%1c%12%8a%3e%ec%c0%20%a0%82T
+    &peer_id=-UT3230-%21pv0%7c%894%ad%8fI%de%f0
+    &port=62402
+    &uploaded=0
+    &downloaded=0
+    &left=0
+    &corrupt=0
+    &key=F883F9B9
+    &event=started
+    &numwant=200
+    &compact=1
+    &no_peer_id=1 }
+
+    sb.Append('?info_hash=').Append(TIdURI.URLEncode(FInfoHash))
+      .Append('&peer_id=').Append(FPeerID)
+      .Append('&port=').Append(FPort)
+      .Append('&uploaded=').Append(FDownloaded)
+    ;
+    FHTTP.Get(sb.ToString);
+  finally
+    sb.Free;
+  end;
 end;
 
-function THTTPTracker.GetKey: string;
+constructor THTTPTracker.Create(const AInfoHash: TUniString;
+  const ATrackerURL: string);
 begin
-  Result := FKey;
+  inherited Create(AInfoHash, ATrackerURL);
+
+  FHTTP := TIdHTTP.Create(nil);
 end;
 
-function THTTPTracker.GetScrapeURI: IURI;
+destructor THTTPTracker.Destroy;
 begin
-  Result := FScrapeURI;
+  FHTTP.Free;
+  inherited;
 end;
 
 end.
