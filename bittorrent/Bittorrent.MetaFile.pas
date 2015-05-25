@@ -225,8 +225,17 @@ begin
 
         for it1 in (FInfoDict[AnnounceListKey] as IBencodedList).Childs do
         begin
-          Assert(Supports(it1, IBencodedString));
-          FTrackers.Add((it1 as IBencodedString).Value);
+          Assert(Supports(it1, IBencodedList));
+
+          for it2 in (it1 as IBencodedList).Childs do
+          begin
+            Assert(Supports(it2, IBencodedString));
+
+            // для избежания повторов
+            with (it2 as IBencodedString) do
+              if FTrackers.IndexOf(Value) = -1 then
+                FTrackers.Add(Value);
+          end;
         end;
       end;
 
