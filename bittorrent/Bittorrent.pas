@@ -364,7 +364,7 @@ type
 
   IHTTPTracker = interface(ITracker)
   ['{A9DD16E2-40F2-479A-B9C5-E8F7CA664C73}']
-    function GetPeerID: TUniString;
+    function GetPeerID: string;
     function GetKey: string;
     function GetPort: TIdPort;
     function GetUploaded: UInt64;
@@ -378,7 +378,7 @@ type
     function GetEvent: THTTPTrackerEvent;
     procedure SetEvent(const Value: THTTPTrackerEvent);
 
-    property PeerID: TUniString read GetPeerID;
+    property PeerID: string read GetPeerID;
     property Key: string read GetKey;
     property Port: TIdPort read GetPort;
     property Uploaded: UInt64 read GetUploaded write SetUploaded;
@@ -510,6 +510,7 @@ type
     procedure AddPeer(const AHost: string; APort: TIdPort; APeerID: string;
       AIPVer: TIdIPVersion = Id_IPv4); overload;
     procedure AddPeer(APeer: IPeer; AHSMessage: IHandshakeMessage); overload;
+    procedure AddTracker(const ATrackerURL, APeerID: string; AListenPort: TIdPort);
     procedure Touch;
     procedure Delete(ADeleteFiles: Boolean = False);
 
@@ -561,6 +562,8 @@ type
     function AddTorrent(const AFileName, ADownloadPath: string): TUniString;
     { добавить торрент по magnet-ссылке }
     function AddMagnetURI(const AMagnetURI, ADownloadPath: string): TUniString;
+    { добавить торрент-трекер }
+    procedure AddTracker(const AInfoHash: TUniString; const ATrackerURL: string);
 
     function DeleteTorrent(const AInfoHash: TUniString): Boolean;
 
@@ -576,15 +579,17 @@ type
     destructor Destroy; override;
   end;
 
-  EBittorrentException      = class(Exception);
+  EBittorrentException        = class(Exception);
 
-  EServerException          = class(EBittorrentException);
-  EServerInvalidPeer        = class(EServerException);
+  ETrackerInvalidProtocol     = class(EBittorrentException);
 
-  EFileSystemException      = class(EBittorrentException);
-  EFileSystemReadException  = class(EFileSystemException);
-  EFileSystemWriteException = class(EFileSystemException);
-  EFileSystemCheckException = class(EFileSystemException);
+  EServerException            = class(EBittorrentException);
+  EServerInvalidPeer          = class(EServerException);
+
+  EFileSystemException        = class(EBittorrentException);
+  EFileSystemReadException    = class(EFileSystemException);
+  EFileSystemWriteException   = class(EFileSystemException);
+  EFileSystemCheckException   = class(EFileSystemException);
 
 implementation
 
@@ -661,6 +666,19 @@ begin
   Result := mf.InfoHash;
 
   AddSeeding(TSeeding.Create(ADownloadPath, FThreads, mf, FClientVersion, 0));
+end;
+
+procedure TBittorrent.AddTracker(const AInfoHash: TUniString; const ATrackerURL: string);
+var
+  s: ISeeding;
+begin
+  Lock;
+  try
+    if FSeedings.TryGetValue(AInfoHash, s) then
+      s.AddTracker(ATrackerURL, FPeerID, FListener.DefaultPort);
+  finally
+    Unlock;
+  end;
 end;
 
 function TBittorrent.Blacklisted(AHost: string): Boolean;

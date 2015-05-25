@@ -8,7 +8,7 @@ uses
   Basic.UniString,
   Bittorrent, Bittorrent.Bitfield, Bittorrent.Utils, Bittorrent.ThreadPool,
   BusyObj, Common.SortedList,
-  IdGlobal, IdStack;
+  IdGlobal, IdStack, IdURI;
 
 type
   { собственно раздача. одна раздача -- один торрент-файл }
@@ -149,6 +149,7 @@ type
     procedure AddPeer(const AHost: string; APort: TIdPort; APeerID: string;
       AIPVer: TIdIPVersion = Id_IPv4); overload;
     procedure AddPeer(APeer: IPeer; AHSMessage: IHandshakeMessage); overload;
+    procedure AddTracker(const ATrackerURL, APeerID: string; AListenPort: TIdPort);
     procedure Touch; inline;
     procedure Delete(ADeleteFiles: Boolean = False); inline;
 
@@ -181,7 +182,8 @@ implementation
 
 uses
   Bittorrent.Peer, Bittorrent.Messages, Bittorrent.Extensions, Bittorrent.Piece,
-  Bittorrent.MetaFile, Bittorrent.PiecePicker, Bittorrent.FileSystem;
+  Bittorrent.MetaFile, Bittorrent.PiecePicker, Bittorrent.FileSystem,
+  Bittorrent.Tracker;
 
 { TSeeding }
 
@@ -221,6 +223,33 @@ begin
     FPeers.Add(APeer);
     ApplyPeerCallbacks(APeer);
     OnPeerConnect(APeer, AHSMessage);
+  finally
+    Unlock;
+  end;
+end;
+
+procedure TSeeding.AddTracker(const ATrackerURL, APeerID: string;
+  AListenPort: TIdPort);
+var
+  tr: ITracker;
+  uri: TIdURI;
+begin
+  Lock;
+  try
+    for tr in FTrackers do
+      if tr.AnnounceURL = ATrackerURL then
+        Exit;
+
+    uri := TIdURI.Create(ATrackerURL);
+    try
+      if uri.Protocol.ToLower = 'http' then
+        FTrackers.Add(THTTPTracker.Create(FThreadPool, FInfoHash, ATrackerURL,
+          APeerID, AListenPort) as ITracker)
+      else
+        raise ETrackerInvalidProtocol.CreateFmt('Unknown tracker uri protocol (%s)', [uri.Protocol]);
+    finally
+      uri.Free;
+    end;
   finally
     Unlock;
   end;

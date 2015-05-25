@@ -47,7 +47,7 @@ type
     //FSSL: TIdSSLIOHandlerSocketOpenSSL;
     //FCookies: TIdCookieManager;
     FHTTP: TIdHTTP;
-    FPeerID: TUniString;
+    FPeerID: string;
     FKey: string;
     FPort: TIdPort;
     FUploaded: UInt64;
@@ -56,7 +56,7 @@ type
     FCorrupt: UInt64;
     FEvent: THTTPTrackerEvent;
 
-    function GetPeerID: TUniString; inline;
+    function GetPeerID: string; inline;
     function GetKey: string; inline;
     function GetPort: TIdPort; inline;
     function GetUploaded: UInt64; inline;
@@ -77,7 +77,7 @@ type
     procedure Scrape; override;
   public
     constructor Create(APool: TThreadPool; const AInfoHash: TUniString;
-      const ATrackerURL: string; const APeerID: TUniString; APort: TIdPort);
+      const ATrackerURL: string; const APeerID: string; APort: TIdPort);
     destructor Destroy; override;
   end;
 
@@ -222,7 +222,7 @@ begin
 end;
 
 constructor THTTPTracker.Create(APool: TThreadPool; const AInfoHash: TUniString;
-  const ATrackerURL: string; const APeerID: TUniString; APort: TIdPort);
+  const ATrackerURL: string; const APeerID: string; APort: TIdPort);
 var
   tmp: TUniString;
 begin
@@ -232,7 +232,7 @@ begin
   FHTTP := TIdHTTP.Create(nil);
   //FHTTP.IOHandler := FSSL;
 
-  FPeerID.Assign(APeerID);
+  FPeerID := APeerID;
   FPort := APort;
 
   tmp.Len := 4{8?};
@@ -282,7 +282,7 @@ begin
   Result := FLeft;
 end;
 
-function THTTPTracker.GetPeerID: TUniString;
+function THTTPTracker.GetPeerID: string;
 begin
   Result := FPeerID;
 end;
