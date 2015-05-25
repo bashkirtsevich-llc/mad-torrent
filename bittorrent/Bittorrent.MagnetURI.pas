@@ -3,7 +3,7 @@
 interface
 
 uses
-  System.SysUtils, System.Generics.Collections,
+  System.Classes, System.SysUtils,
   Bittorrent,
   Basic.UniString;
 
@@ -36,13 +36,13 @@ type
   private
     FInfoHash: TUniString;
     FDisplayName: string;
-    FTrackers: TList<string>;
-    FWebSeeds: TList<string>;
+    FTrackers: TStrings;
+    FWebSeeds: TStrings;
 
     function GetInfoHash: TUniString; inline;
     function GetDisplayName: string; inline;
-    function GetTrackers: TList<string>; inline;
-    function GetWebSeeds: TList<string>; inline;
+    function GetTrackers: TStrings; inline;
+    function GetWebSeeds: TStrings; inline;
   public
     constructor Create(const AMagnetURI: string);
     destructor Destroy; override;
@@ -103,8 +103,8 @@ begin
 
   Assert(not AMagnetURI.IsEmpty);
 
-  FTrackers := System.Generics.Collections.TList<string>.Create;
-  FWebSeeds := System.Generics.Collections.TList<string>.Create;
+  FTrackers := TStringList.Create;
+  FWebSeeds := TStringList.Create;
 
   i   := 1;
   st  := stNone;
@@ -196,12 +196,12 @@ begin
   Result := FInfoHash;
 end;
 
-function TMagnetURI.GetTrackers: System.Generics.Collections.TList<string>;
+function TMagnetURI.GetTrackers: TStrings;
 begin
   Result := FTrackers;
 end;
 
-function TMagnetURI.GetWebSeeds: System.Generics.Collections.TList<string>;
+function TMagnetURI.GetWebSeeds: TStrings;
 begin
   Result := FWebSeeds;
 end;

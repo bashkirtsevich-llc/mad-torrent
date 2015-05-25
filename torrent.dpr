@@ -26,9 +26,7 @@ uses
   Bittorrent.ThreadPool in 'bittorrent\Bittorrent.ThreadPool.pas',
   Basic.Bencoding in 'Basic.Bencoding.pas',
   Bittorrent.Tracker in 'bittorrent\Bittorrent.Tracker.pas',
-  Network.URI in 'Network.URI.pas',
-  Bittorrent.Tracker.AnnounceParameters in 'bittorrent\Bittorrent.Tracker.AnnounceParameters.pas',
-  Bittorrent.Tracker.ScrapeParameters in 'bittorrent\Bittorrent.Tracker.ScrapeParameters.pas';
+  Network.URI in 'Network.URI.pas';
 
 {$R *.res}
 

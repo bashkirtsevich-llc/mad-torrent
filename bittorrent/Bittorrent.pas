@@ -339,27 +339,11 @@ type
     trGenericError      = 900
   );
 
-{ http://tracker.ru/announce
-    ?info_hash=%1a%93%87s%26r%0d%a9%e6%89%1c%12%8a%3e%ec%c0%20%a0%82T
-    &peer_id=-UT3230-%21pv0%7c%894%ad%8fI%de%f0
-    &port=62402
-    &uploaded=0
-    &downloaded=0
-    &left=0
-    &corrupt=0
-    &key=F883F9B9
-    &event=started
-    &numwant=200
-    &compact=1
-    &no_peer_id=1 }
-
-  ITracker = interface
+  ITracker = interface(IBusy)
   ['{91C224F2-8443-4D74-A444-0F9874F9D768}']
     function GetInfoHash: TUniString;
     function GetAnnounceURL: string;
     function GetScrapeURL: string;
-    function GetCanAnnounce: Boolean;
-    function GetCanScrape: Boolean;
     function GetTrackerResponse: TTrackerResponse;
     function GetTrackerResponseText: string;
 
@@ -368,27 +352,53 @@ type
     property AnnounceURL: string read GetAnnounceURL;
     property ScrapeURL: string read GetScrapeURL;
 
-    property CanAnnounce: Boolean read GetCanAnnounce;
-    property CanScrape: Boolean read GetCanScrape;
-
     property TrackerResponse: TTrackerResponse read GetTrackerResponse;
     property TrackerResponseText: string read GetTrackerResponseText;
+  end;
 
-    procedure Announce;
-    procedure Scrape;
+  THTTPTrackerEvent = (evStarted, evStopped, evComplete);
+
+  THTTPTrackerEventHelper = record helper for THTTPTrackerEvent
+    function ToString: string;
+  end;
+
+  IHTTPTracker = interface(ITracker)
+  ['{A9DD16E2-40F2-479A-B9C5-E8F7CA664C73}']
+    function GetPeerID: TUniString;
+    function GetKey: string;
+    function GetPort: TIdPort;
+    function GetUploaded: UInt64;
+    procedure SetUploaded(const Value: UInt64);
+    function GetDownloaded: UInt64;
+    procedure SetDownloaded(const Value: UInt64);
+    function GetLeft: UInt64;
+    procedure SetLeft(const Value: UInt64);
+    function GetCorrupt: UInt64;
+    procedure SetCorrupt(const Value: UInt64);
+    function GetEvent: THTTPTrackerEvent;
+    procedure SetEvent(const Value: THTTPTrackerEvent);
+
+    property PeerID: TUniString read GetPeerID;
+    property Key: string read GetKey;
+    property Port: TIdPort read GetPort;
+    property Uploaded: UInt64 read GetUploaded write SetUploaded;
+    property Downloaded: UInt64 read GetDownloaded write SetDownloaded;
+    property Left: UInt64 read GetLeft write SetLeft;
+    property Corrupt: UInt64 read GetCorrupt write SetCorrupt;
+    property Event: THTTPTrackerEvent read GetEvent write SetEvent;
   end;
 
   IMagnetURI = interface
   ['{C90069A3-FA2D-41DE-897A-09868B542325}']
     function GetInfoHash: TUniString;
     function GetDisplayName: string;
-    function GetTrackers: TList<string>;
-    function GetWebSeeds: TList<string>;
+    function GetTrackers: TStrings;
+    function GetWebSeeds: TStrings;
 
     property InfoHash: TUniString read GetInfoHash;
     property DisplayName: string read GetDisplayName;
-    property Trackers: TList<string> read GetTrackers;
-    property WebSeeds: TList<string> read GetWebSeeds;
+    property Trackers: TStrings read GetTrackers;
+    property WebSeeds: TStrings read GetWebSeeds;
   end;
 
   IFileItem = interface
@@ -412,6 +422,7 @@ type
     function GetPiecesLength: Integer;
     function GetFilesByPiece(Index: Integer): IList<IFileItem>;
     function GetFiles: TList<IFileItem>;
+    function GetTrackers: TStrings;
     function GetInfoHash: TUniString;
     function GetMetadataSize: Integer;
     function GetMetadata: TUniString;
@@ -427,6 +438,7 @@ type
     property PieceOffset[APieceIndex: Integer]: Int64 read GetPieceOffset;
     property FilesByPiece[Index: Integer]: IList<IFileItem> read GetFilesByPiece;
     property Files: TList<IFileItem> read GetFiles;
+    property Trackers: TStrings read GetTrackers;
     property InfoHash: TUniString read GetInfoHash;
     property MetadataSize: Integer read GetMetadataSize;
     property Metadata: TUniString read GetMetadata;
@@ -483,6 +495,7 @@ type
   ['{A428EA0C-EF82-4A67-9F74-DF22EC858D20}']
     function GetLastRequest: TDateTime;
     function GetPeers: TList<IPeer>;
+    function GetTrackers: TList<ITracker>;
     function GetInfoHash: TUniString;
     function GetBitfield: TBitField;
     function GetMetafile: IMetaFile;
@@ -502,6 +515,7 @@ type
 
     property LastRequest: TDateTime read GetLastRequest;
     property Peers: TList<IPeer> read GetPeers;
+    property Trackers: TList<ITracker> read GetTrackers;
     property InfoHash: TUniString read GetInfoHash;
     property Bitfield: TBitField read GetBitfield;
     property Metafile: IMetaFile read GetMetafile;
@@ -861,6 +875,19 @@ end;
 procedure TBittorrent.Unlock;
 begin
   System.TMonitor.Exit(FLock);
+end;
+
+{ THTTPTrackerEventHelper }
+
+function THTTPTrackerEventHelper.ToString: string;
+const
+  str: array[THTTPTrackerEvent] of string = (
+    'started',
+    'stopped',
+    'complete'
+  );
+begin
+  Result := str[Self];
 end;
 
 end.

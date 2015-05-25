@@ -12,6 +12,8 @@ type
   TMetafile = class(TInterfacedObject, IMetaFile)
   private
     const
+      AnnounceKey     = 'announce';
+      AnnounceListKey = 'announce-list';
       InfoKey         = 'info';
       FilesKey        = 'files';
       NameKey         = 'name';
@@ -22,6 +24,7 @@ type
   private
     FTotalSize: UInt64;
     FFiles: TList<IFileItem>;
+    FTrackers: TStrings;
     FPieceLength: Integer;
     FInfoHash: TUniString;
     FInfoDict: IBencodedDictionary;
@@ -36,6 +39,7 @@ type
     function GetPiecesLength: Integer; inline;
     function GetFilesByPiece(Index: Integer): IList<IFileItem>;
     function GetFiles: TList<IFileItem>; inline;
+    function GetTrackers: TStrings; inline;
     function GetInfoHash: TUniString; inline;
     function GetMetadataSize: Integer; inline;
     function GetMetadata: TUniString; inline;
@@ -86,6 +90,7 @@ constructor TMetafile.Create(AStream: TStream);
 begin
   inherited Create;
   FFiles := System.Generics.Collections.TList<IFileItem>.Create;
+  FTrackers := TStringList.Create;
   FPieceHashes := System.Generics.Collections.TList<TUniString>.Create;
 
   LoadFromStream(AStream);
@@ -93,6 +98,7 @@ end;
 
 destructor TMetafile.Destroy;
 begin
+  FTrackers.Free;
   FFiles.Free;
   FPieceHashes.Free;
   inherited;
@@ -180,6 +186,11 @@ begin
   Result := FTotalSize;
 end;
 
+function TMetafile.GetTrackers: TStrings;
+begin
+  Result := FTrackers;
+end;
+
 procedure TMetafile.LoadFromStream(AStream: TStream);
 var
   buf: TUniString;
@@ -201,6 +212,24 @@ begin
       Assert(Supports(AValue, IBencodedDictionary));
 
       FInfoDict := AValue as IBencodedDictionary;
+
+      if FInfoDict.ContainsKey(AnnounceKey) then
+      begin
+        Assert(Supports(FInfoDict[AnnounceKey], IBencodedString));
+        FTrackers.Add((FInfoDict[AnnounceKey] as IBencodedString).Value);
+      end;
+
+      if FInfoDict.ContainsKey(AnnounceListKey) then
+      begin
+        Assert(Supports(FInfoDict[AnnounceListKey], IBencodedList));
+
+        for it1 in (FInfoDict[AnnounceListKey] as IBencodedList).Childs do
+        begin
+          Assert(Supports(it1, IBencodedString));
+          FTrackers.Add((it1 as IBencodedString).Value);
+        end;
+      end;
+
       if FInfoDict.ContainsKey(InfoKey) then
       begin
         Assert(Supports(FInfoDict[InfoKey], IBencodedDictionary));

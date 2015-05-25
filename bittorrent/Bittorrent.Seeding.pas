@@ -122,6 +122,7 @@ type
     FPiecePicker: IPiecePicker;
     FThreadPool: TThreadPool;
     FPeers: TList<IPeer>; // их бы сортировать по скорости и количеству отдаваемго
+    FTrackers: TList<ITracker>;
     FPieces: TDictionary<Integer, IPiece>;
     FStates: TSeedingStates;
     FClientVersion: string;
@@ -132,6 +133,7 @@ type
   private
     function GetLastRequest: TDateTime; inline;
     function GetPeers: TList<IPeer>; inline;
+    function GetTrackers: TList<ITracker>; inline;
     function GetInfoHash: TUniString; inline;
     function GetBitfield: TBitField; inline;
     function GetMetafile: IMetaFile; inline;
@@ -253,6 +255,7 @@ begin
   FLock         := TObject.Create;
 
   FPeers        := System.Generics.Collections.TList<IPeer>.Create;
+  FTrackers     := System.Generics.Collections.TList<ITracker>.Create;
 
   FPieces       := System.Generics.Collections.TDictionary<Integer, IPiece>.Create;
   FPiecePicker  := TRarestPicker.Create;
@@ -290,6 +293,7 @@ end;
 
 destructor TSeeding.Destroy;
 begin
+  FTrackers.Free;
   FPeers.Free;
   FPieces.Free;
   FLock.Free;
@@ -351,6 +355,11 @@ end;
 function TSeeding.GetState: TSeedingStates;
 begin
   Result := FStates;
+end;
+
+function TSeeding.GetTrackers: TList<ITracker>;
+begin
+  Result := FTrackers;
 end;
 
 procedure TSeeding.InitMetadata(AMetafile: IMetaFile);
