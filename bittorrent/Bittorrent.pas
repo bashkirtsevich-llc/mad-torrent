@@ -411,7 +411,7 @@ type
     function GetPiecesCount: Integer;
     function GetPiecesLength: Integer;
     function GetFilesByPiece(Index: Integer): IList<IFileItem>;
-    function GetFiles: IList<IFileItem>;
+    function GetFiles: TList<IFileItem>;
     function GetInfoHash: TUniString;
     function GetMetadataSize: Integer;
     function GetMetadata: TUniString;
@@ -426,7 +426,7 @@ type
     property PieceLength[APieceIndex: Integer]: Integer read GetPieceLength;
     property PieceOffset[APieceIndex: Integer]: Int64 read GetPieceOffset;
     property FilesByPiece[Index: Integer]: IList<IFileItem> read GetFilesByPiece;
-    property Files: IList<IFileItem> read GetFiles;
+    property Files: TList<IFileItem> read GetFiles;
     property InfoHash: TUniString read GetInfoHash;
     property MetadataSize: Integer read GetMetadataSize;
     property Metadata: TUniString read GetMetadata;
@@ -501,7 +501,7 @@ type
     procedure Delete(ADeleteFiles: Boolean = False);
 
     property LastRequest: TDateTime read GetLastRequest;
-    property Peers: TList<IPeer> read GetPeers; // может скрыть?
+    property Peers: TList<IPeer> read GetPeers;
     property InfoHash: TUniString read GetInfoHash;
     property Bitfield: TBitField read GetBitfield;
     property Metafile: IMetaFile read GetMetafile;

@@ -35,7 +35,7 @@ type
     function GetPiecesCount: Integer; inline;
     function GetPiecesLength: Integer; inline;
     function GetFilesByPiece(Index: Integer): IList<IFileItem>;
-    function GetFiles: IList<IFileItem>;
+    function GetFiles: TList<IFileItem>; inline;
     function GetInfoHash: TUniString; inline;
     function GetMetadataSize: Integer; inline;
     function GetMetadata: TUniString; inline;
@@ -98,14 +98,9 @@ begin
   inherited;
 end;
 
-function TMetafile.GetFiles: IList<IFileItem>;
-var
-  it: IFileItem;
+function TMetafile.GetFiles: System.Generics.Collections.TList<IFileItem>;
 begin
-  Result := TList<IFileItem>.Create as IList<IFileItem>;
-
-  for it in FFiles do
-    Result.Add(it);
+  Result := FFiles;
 end;
 
 function TMetafile.GetFilesByPiece(Index: Integer): IList<IFileItem>;
