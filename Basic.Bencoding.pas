@@ -102,10 +102,15 @@ type
   TBencodeParseStringException  = class(TBencodeException);
   TBencodeDictPairException     = class(TBencodeException);
 
+function BencodeParse(AStream: TStream; ASorting: Boolean = True;
+  AParseCallback: TFunc<{ last position   } Integer,
+                        { parsed data     } IBencodedValue,
+                        { continue parse? } Boolean> = nil): IBencodedBase; overload; inline;
 function BencodeParse(const AData: TUniString; ASorting: Boolean = True;
   AParseCallback: TFunc<{ last position   } Integer,
                         { parsed data     } IBencodedValue,
-                        { continue parse? } Boolean> = nil): IBencodedBase;
+                        { continue parse? } Boolean> = nil): IBencodedBase; overload;
+
 function BencodeString(const AData: TUniString): IBencodedString; overload;
 function BencodeString(const AData: string): IBencodedString; overload;
 
@@ -617,6 +622,19 @@ begin
 end;
 
 { TBencode }
+
+function BencodeParse(AStream: TStream; ASorting: Boolean = True;
+  AParseCallback: TFunc<Integer, IBencodedValue, Boolean> = nil): IBencodedBase;
+var
+  data: TUniString;
+begin
+  data.Len := AStream.Size;
+  AStream.Position := 0;
+
+  AStream.Read(data.DataPtr[0]^, AStream.Size);
+
+  Result := BencodeParse(data, ASorting, AParseCallback);
+end;
 
 function BencodeParse(const AData: TUniString; ASorting: Boolean = True;
   AParseCallback: TFunc<Integer, IBencodedValue, Boolean> = nil): IBencodedBase;

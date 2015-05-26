@@ -192,16 +192,12 @@ begin
 end;
 
 procedure TMetafile.LoadFromStream(AStream: TStream);
-var
-  buf: TUniString;
 begin
   FTotalSize := 0;
 
   FMetadataSize := AStream.Size - AStream.Position;
-  buf.Len := FMetadataSize;
-  AStream.Read(buf.DataPtr[0]^, FMetadataSize);
 
-  BencodeParse(buf, False,
+  BencodeParse(AStream, False,
     function (ALen: Integer; AValue: IBencodedValue): Boolean
     var
       it1, it2: IBencodedValue;
