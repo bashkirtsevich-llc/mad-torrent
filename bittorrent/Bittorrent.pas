@@ -346,6 +346,10 @@ type
     function GetScrapeURL: string;
     function GetTrackerResponse: TTrackerResponse;
     function GetTrackerResponseText: string;
+    function GetOnAnnounce: TProc<ITracker>;
+    procedure SetOnAnnounce(const Value: TProc<ITracker>);
+    function GetOnScrape: TProc<ITracker>;
+    procedure SetOnScrape(const Value: TProc<ITracker>);
 
     property InfoHash: TUniString read GetInfoHash;
 
@@ -354,6 +358,9 @@ type
 
     property TrackerResponse: TTrackerResponse read GetTrackerResponse;
     property TrackerResponseText: string read GetTrackerResponseText;
+
+    property OnAnnounce: TProc<ITracker> read GetOnAnnounce write SetOnAnnounce;
+    property OnScrape: TProc<ITracker> read GetOnScrape write SetOnScrape;
   end;
 
   THTTPTrackerEvent = (evStarted, evStopped, evComplete);
@@ -581,7 +588,9 @@ type
 
   EBittorrentException        = class(Exception);
 
-  ETrackerInvalidProtocol     = class(EBittorrentException);
+  ETrackerException           = class(EBittorrentException);
+  ETrackerInvalidProtocol     = class(ETrackerException);
+  ETrackerFailure             = class(ETrackerException);
 
   EServerException            = class(EBittorrentException);
   EServerInvalidPeer          = class(EServerException);
