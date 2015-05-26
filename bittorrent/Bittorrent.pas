@@ -314,38 +314,12 @@ type
     property OnException: TProc<IPeer, Exception> read GetOnException write SetOnException;
   end;
 
-{ 100	Invalid request type: client request was not a HTTP GET.
-  101	Missing info_hash.
-  102	Missing peer_id.
-  103	Missing port.
-  150	Invalid infohash: infohash is not 20 bytes long.
-  151	Invalid peerid: peerid is not 20 bytes long.
-  152	Invalid numwant. Client requested more peers than allowed by tracker.
-  200	info_hash not found in the database. Sent only by trackers that do not automatically include new hashes into the database.
-  500	Client sent an eventless request before the specified time.
-  900	Generic error. }
-
-  TTrackerResponse = (
-    trNone              = 0,
-    trInvalidRequeest   = 100,
-    trMissingInfoHash   = 101,
-    trMissingPeerID     = 102,
-    trMissingPort       = 103,
-    trInvalidInfoHash   = 150,
-    trInvalidPeerID     = 151,
-    trInvalidNumWant    = 152,
-    trInfoHashNotFound  = 200,
-    trEventlessRequest  = 500,
-    trGenericError      = 900
-  );
-
   ITracker = interface(IBusy)
   ['{91C224F2-8443-4D74-A444-0F9874F9D768}']
     function GetInfoHash: TUniString;
     function GetAnnounceURL: string;
     function GetScrapeURL: string;
-    function GetTrackerResponse: TTrackerResponse;
-    function GetTrackerResponseText: string;
+    function GetFailureResponse: string;
     function GetOnAnnounce: TProc<ITracker>;
     procedure SetOnAnnounce(const Value: TProc<ITracker>);
     function GetOnScrape: TProc<ITracker>;
@@ -356,8 +330,7 @@ type
     property AnnounceURL: string read GetAnnounceURL;
     property ScrapeURL: string read GetScrapeURL;
 
-    property TrackerResponse: TTrackerResponse read GetTrackerResponse;
-    property TrackerResponseText: string read GetTrackerResponseText;
+    property FailureResponse: string read GetFailureResponse;
 
     property OnAnnounce: TProc<ITracker> read GetOnAnnounce write SetOnAnnounce;
     property OnScrape: TProc<ITracker> read GetOnScrape write SetOnScrape;
@@ -367,6 +340,17 @@ type
 
   THTTPTrackerEventHelper = record helper for THTTPTrackerEvent
     function ToString: string;
+  end;
+
+  IHTTPTrackerPeerInfo = interface
+  ['{7DF7D17E-0949-47C2-97D6-AFDFFF4475EB}']
+    function GetPeerID: TUniString;
+    function GetHost: string;
+    function GetPort: TIdPort;
+
+    property PeerID: TUniString read GetPeerID;
+    property Host: string read GetHost;
+    property Port: TIdPort read GetPort;
   end;
 
   IHTTPTracker = interface(ITracker)
@@ -384,6 +368,7 @@ type
     procedure SetCorrupt(const Value: UInt64);
     function GetEvent: THTTPTrackerEvent;
     procedure SetEvent(const Value: THTTPTrackerEvent);
+    function GetPeers: TList<IHTTPTrackerPeerInfo>;
 
     property PeerID: string read GetPeerID;
     property Key: string read GetKey;
@@ -393,6 +378,7 @@ type
     property Left: UInt64 read GetLeft write SetLeft;
     property Corrupt: UInt64 read GetCorrupt write SetCorrupt;
     property Event: THTTPTrackerEvent read GetEvent write SetEvent;
+    property Peers: TList<IHTTPTrackerPeerInfo> read GetPeers;
   end;
 
   IMagnetURI = interface
@@ -590,6 +576,7 @@ type
 
   ETrackerException           = class(EBittorrentException);
   ETrackerInvalidProtocol     = class(ETrackerException);
+  ETrackerInvalidKey          = class(ETrackerException);
   ETrackerFailure             = class(ETrackerException);
 
   EServerException            = class(EBittorrentException);

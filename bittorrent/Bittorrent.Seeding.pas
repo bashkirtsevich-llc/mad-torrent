@@ -183,7 +183,7 @@ implementation
 uses
   Bittorrent.Peer, Bittorrent.Messages, Bittorrent.Extensions, Bittorrent.Piece,
   Bittorrent.MetaFile, Bittorrent.PiecePicker, Bittorrent.FileSystem,
-  Bittorrent.Tracker;
+  Bittorrent.Tracker.HTTPTracker;
 
 { TSeeding }
 
@@ -238,7 +238,7 @@ begin
   try
     for tr in FTrackers do
       if tr.AnnounceURL = ATrackerURL then
-        Exit;
+        raise Exception.Create('Tracker already added');
 
     uri := TIdURI.Create(ATrackerURL);
     try
@@ -698,6 +698,7 @@ end;
 procedure TSeeding.DoSync;
 var
   peer: IPeer;
+  tr: ITracker;
   want: TBitField;
   haveMD,
   weLoad,
@@ -718,6 +719,13 @@ begin
       want := not FBitField;
       want := want and not FDownloadQueue.AsBitfield;
     end;
+
+    for tr in FTrackers do
+      if not tr.Busy then
+      begin
+
+        tr.Sync;
+      end;
 
     for peer in FPeers do
       if not peer.Busy then
