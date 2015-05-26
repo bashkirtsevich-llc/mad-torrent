@@ -4,6 +4,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Generics.Collections, System.Math,
+  System.Hash,
   Spring.Collections,
   Bittorrent, Bittorrent.Utils,
   Basic.Bencoding, Basic.UniString;

@@ -290,7 +290,7 @@ procedure THaveMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
   AMsgSize: Integer);
 begin
   Assert(AMsgSize = 4);
-  FPieceIndex := AIOHandler.ReadLongWord;
+  FPieceIndex := AIOHandler.ReadUInt32;
 end;
 
 procedure THaveMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
@@ -380,9 +380,9 @@ procedure TRequestMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
 begin
   with AIOHandler do
   begin
-    FPieceIndex := ReadLongInt;
-    FOffset     := ReadLongInt;
-    FSize       := ReadLongInt;
+    FPieceIndex := ReadInt32;
+    FOffset     := ReadInt32;
+    FSize       := ReadInt32;
   end;
 end;
 
@@ -437,8 +437,8 @@ procedure TPieceMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
 //var
 //  buf: TIdBytes;
 begin
-  FPieceIndex := AIOHandler.ReadLongWord;
-  FOffset := AIOHandler.ReadLongWord;
+  FPieceIndex := AIOHandler.ReadUInt32;
+  FOffset := AIOHandler.ReadUInt32;
 
 //  AIOHandler.ReadBytes(buf, AMsgSize - FPieceIndex.Size - FOffset.Size);
 //  FBlock := buf;
@@ -503,9 +503,9 @@ end;
 procedure TCancelMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
   AMsgSize: Integer);
 begin
-  FPieceIndex := AIOHandler.ReadLongWord;
-  FOffset     := AIOHandler.ReadLongWord;
-  FSize       := AIOHandler.ReadLongWord;
+  FPieceIndex := AIOHandler.ReadUInt32;
+  FOffset     := AIOHandler.ReadUInt32;
+  FSize       := AIOHandler.ReadUInt32;
 end;
 
 procedure TCancelMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
@@ -544,7 +544,7 @@ procedure TPortMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
   AMsgSize: Integer);
 begin
   Assert(AMsgSize = 2);
-  FPort := AIOHandler.ReadWord;
+  FPort := AIOHandler.ReadUInt16;
 end;
 
 procedure TPortMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
@@ -680,7 +680,7 @@ var
 begin
   with AIOHandler do
   begin
-    msgLen := ReadLongInt; { читаем длину }
+    msgLen := ReadInt32; { читаем длину }
 
     if msgLen > 0 then
     begin

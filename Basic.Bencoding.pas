@@ -27,8 +27,9 @@ unit Basic.Bencoding;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.Generics.Collections, Basic.UniString,
-  System.Generics.Defaults;
+  System.SysUtils, System.Classes, System.Hash, System.Generics.Collections,
+  System.Generics.Defaults,
+  Basic.UniString;
 
 type
   {$REGION 'interfaces'}
@@ -301,7 +302,7 @@ end;
 
 function TBencodedInteger.GetHashCode: Integer;
 begin
-  Result := BobJenkinsHash(FValue, SizeOf(Int64), 0);
+  Result := THashBobJenkins.GetHashValue(FValue, SizeOf(Int64));
 end;
 
 function TBencodedInteger.GetValue: Int64;

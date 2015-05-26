@@ -223,7 +223,7 @@ function THTTPTracker.ParseResponse(ALen: Integer;
       host := BytesToIPv4Str(bytes, i);
       Inc(i, 4);
 
-      port := LittleEndianToHost(BytesToWord(bytes, i));
+      port := LittleEndianToHost(BytesToUInt16(bytes, i));
       Inc(i, 2);
 
       FPeers.Add(THTTPTrackerPeerInfo.Create('', host, port) as IHTTPTrackerPeerInfo);

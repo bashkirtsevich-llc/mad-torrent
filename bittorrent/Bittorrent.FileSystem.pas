@@ -4,7 +4,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Generics.Collections, System.DateUtils,
-  System.Math,
+  System.Math, System.Hash,
   Bittorrent, Bittorrent.Bitfield, Bittorrent.Utils, Basic.UniString;
 
 type

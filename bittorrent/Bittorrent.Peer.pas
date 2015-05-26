@@ -3,7 +3,7 @@
 interface
 
 uses
-  System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
+  System.SysUtils, System.Generics.Collections, System.Hash,
   System.DateUtils,
   Spring.Collections,
   Bittorrent, Bittorrent.Bitfield, Bittorrent.Utils, Bittorrent.ThreadPool,
@@ -201,7 +201,7 @@ begin
 
   tmp               := AConnection.Host;
   tmp               := tmp + AConnection.Port;
-  FHashCode         := BobJenkinsHash(tmp.DataPtr[0]^, tmp.Len, 0);
+  FHashCode         := THashBobJenkins.GetHashValue(tmp.DataPtr[0]^, tmp.Len);
 
   FSendQueue        := TQueue<IMessage>.Create;
 end;

@@ -4,7 +4,7 @@ interface
 
 uses
   System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
-  System.Math, System.DateUtils,
+  System.Math, System.DateUtils, System.Hash,
   Basic.UniString,
   Bittorrent, Bittorrent.Bitfield, Bittorrent.Utils, Bittorrent.ThreadPool,
   BusyObj, Common.SortedList,

@@ -3,36 +3,32 @@
 interface
 
 uses
+  System.SysUtils, System.DateUtils, System.Hash,
   Winapi.Windows,
-  System.SysUtils, System.DateUtils,
-  Basic.UniString,
-  IdHMAC, IdHMACSHA1, IdGlobal;
+  Basic.UniString;
 
-function SHA1(const AData: TIdBytes): TUniString; overload;
-function SHA1(const Value: TUniString): TUniString; overload;
+function SHA1(const AData: TBytes): TUniString; overload; inline;
+function SHA1(const Value: TUniString): TUniString; overload; inline;
 function UtcNow: TDateTime;
 
 implementation
 
-function SHA1(const AData: TIdBytes): TUniString; overload;
+function SHA1(const AData: TBytes): TUniString; overload;
 var
-  ctx: TIdHMAC;
+  ctx: THashSHA1;
 begin
-  ctx := TIdHMACSHA1.Create;
-  try
-    Result := ctx.HashValue(AData);
-  finally
-    ctx.Free;
-  end;
+  ctx := THashSHA1.Create;
+  ctx.Update(AData);
+  Result := ctx.HashAsBytes;
 end;
 
 function SHA1(const Value: TUniString): TUniString; overload;
 var
-  buf: TIdBytes;
+  ctx: THashSHA1;
 begin
-  SetLength(buf, Value.Len);
-  Move(Value.DataPtr[0]^, buf[0], Value.Len);
-  Result := SHA1(buf);
+  ctx := THashSHA1.Create;
+  ctx.Update(Value.DataPtr[0]^, Value.Len);
+  Result := ctx.HashAsBytes;
 end;
 
 function UtcNow: TDateTime;

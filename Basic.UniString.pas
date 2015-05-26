@@ -21,8 +21,8 @@ unit Basic.UniString;
 interface
 
 uses
-  System.SysUtils, System.Variants, System.Math, System.Generics.Collections,
-  System.Generics.Defaults;
+  System.SysUtils, System.Variants, System.Math, System.Hash,
+  System.Generics.Collections, System.Generics.Defaults;
 
 type
   TUniString = record
@@ -562,7 +562,7 @@ end;
 
 function TUniString.GetHashCode: Integer;
 begin
-  Result := BobJenkinsHash(FData[0], GetLen, 0);
+  Result := THashBobJenkins.GetHashValue(FData[0], GetLen);
 end;
 
 function TUniString.GetLen: Integer;
