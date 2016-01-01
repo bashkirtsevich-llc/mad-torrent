@@ -10,7 +10,7 @@ uses
   IdGlobal;
 
 type
-  TTRacker = class(TBusy, ITracker)
+  TTRacker = class abstract(TBusy, ITracker)
   private
     FThreads: TThreadPool;
     FLastAnnounce: TDateTime;
@@ -39,7 +39,7 @@ type
       AAnnouncePort: TIdPort; AAnnounceInterval, ARetrackInterval: Integer); reintroduce;
   end;
 
-  TStatTracker = class(TTRacker, IStatTracker)
+  TStatTracker = class abstract(TTRacker, IStatTracker)
   private
     function GetBytesUploaded: Int64; inline;
     procedure SetBytesUploaded(const Value: Int64); inline;
