@@ -674,7 +674,7 @@ type
     property OnUpdateCounter: TProc<ISeeding, UInt64, UInt64> read GetOnUpdateCounter write SetOnUpdateCounter;
   end;
 
-  IShareman = interface
+  IBittorrent = interface
   ['{5F4DF5D0-6B21-4C16-8EB9-7B250AEA65CC}']
     function GetSeedings: TDictionary<TUniString, ISeeding>;
     function GetBlackListTime: Integer;
@@ -711,7 +711,7 @@ type
     property OnActivateSeeding: TProc<IPeer, TUniString> read GetOnActivateSeeding write SetOnActivateSeeding;
   end;
 
-  TShareman = class(TInterfacedObject, IShareman)
+  TBittorrent = class(TInterfacedObject, IBittorrent)
   public
     const
       SharBlockCount  = 8;
@@ -838,9 +838,9 @@ begin
   Result := MetadataMessageTypeByte[Self];
 end;
 
-{ TShareman }
+{ TBittorrent }
 
-function TShareman.AddSeeding(AMetaFile: IMetaFile; const ABitField: TUniString;
+function TBittorrent.AddSeeding(AMetaFile: IMetaFile; const ABitField: TUniString;
   const ADownloadPath: string; AStates: TSeedingStates): ISeeding;
 begin
   Lock;
@@ -862,12 +862,12 @@ begin
   end;
 end;
 
-function TShareman.AddMagnet(const AMagnet, ADownloadPath: string): ISeeding;
+function TBittorrent.AddMagnet(const AMagnet, ADownloadPath: string): ISeeding;
 begin
 
 end;
 
-procedure TShareman.AddPeer(const AInfoHash: TUniString; const AHost: string;
+procedure TBittorrent.AddPeer(const AInfoHash: TUniString; const AHost: string;
   APort: TIdPort; AIPVer: TIdIPVersion);
 begin
   Assert(APort <> 0);
@@ -885,7 +885,7 @@ begin
   end;
 end;
 
-procedure TShareman.AddToBlackList(AHost: string);
+procedure TBittorrent.AddToBlackList(AHost: string);
 begin
   Lock;
   try
@@ -895,20 +895,20 @@ begin
   end;
 end;
 
-function TShareman.AddTorrent(const ATorrentData: TUniString;
+function TBittorrent.AddTorrent(const ATorrentData: TUniString;
   const ADownloadPath: string): ISeeding;
 begin
   Result := AddTorrent(ATorrentData, '', ADownloadPath, []);
 end;
 
-function TShareman.AddTorrent(const ATorrentData, ABitField: TUniString;
+function TBittorrent.AddTorrent(const ATorrentData, ABitField: TUniString;
   const ADownloadPath: string; AStates: TSeedingStates): ISeeding;
 begin
   Result := AddSeeding(TMetaFile.Create(ATorrentData), ABitField, ADownloadPath,
     AStates);
 end;
 
-function TShareman.Blacklisted(AHost: string): Boolean;
+function TBittorrent.Blacklisted(AHost: string): Boolean;
 begin
   Lock;
   try
@@ -919,7 +919,7 @@ begin
   end;
 end;
 
-function TShareman.ContainsUnit(const AInfoHash: TUniString): Boolean;
+function TBittorrent.ContainsUnit(const AInfoHash: TUniString): Boolean;
 begin
   Lock;
   try
@@ -929,7 +929,7 @@ begin
   end;
 end;
 
-constructor TShareman.Create(const AClientID: TUniString; AListenPort: TIdPort);
+constructor TBittorrent.Create(const AClientID: TUniString; AListenPort: TIdPort);
 begin
   Randomize;
 
@@ -958,7 +958,7 @@ begin
   FListener.OnConnect   := OnPeerConnect;
 end;
 
-function TShareman.DeleteUnit(const AInfoHash: TUniString;
+function TBittorrent.DeleteUnit(const AInfoHash: TUniString;
   ADeleteFiles: Boolean = False): Boolean;
 begin
   Lock;
@@ -976,7 +976,7 @@ begin
   end;
 end;
 
-destructor TShareman.Destroy;
+destructor TBittorrent.Destroy;
 begin
   Stop;
   Sleep(1000); // для завершения активных тредов
@@ -987,32 +987,32 @@ begin
   inherited;
 end;
 
-function TShareman.GetBlackListTime: Integer;
+function TBittorrent.GetBlackListTime: Integer;
 begin
   Result := FBlackListTime;
 end;
 
-function TShareman.GetCounter: ICounter;
+function TBittorrent.GetCounter: ICounter;
 begin
   Result := FCounter;
 end;
 
-function TShareman.GetOnActivateSeeding: TProc<IPeer, TUniString>;
+function TBittorrent.GetOnActivateSeeding: TProc<IPeer, TUniString>;
 begin
   Result := FOnActivateSeeding;
 end;
 
-function TShareman.GetSeedings: TDictionary<TUniString, ISeeding>;
+function TBittorrent.GetSeedings: TDictionary<TUniString, ISeeding>;
 begin
   Result := FSeedings;
 end;
 
-procedure TShareman.Lock;
+procedure TBittorrent.Lock;
 begin
   System.TMonitor.Enter(FLock);
 end;
 
-procedure TShareman.OnPeerConnect(AConnection: IConnection);
+procedure TBittorrent.OnPeerConnect(AConnection: IConnection);
 var
   peer: IPeer;
   needStart, allOK: Boolean;
@@ -1118,7 +1118,7 @@ begin
   end;
 end;
 
-function TShareman.PauseUnit(const AInfoHash: TUniString): Boolean;
+function TBittorrent.PauseUnit(const AInfoHash: TUniString): Boolean;
 begin
   Lock;
   try
@@ -1131,7 +1131,7 @@ begin
   end;
 end;
 
-procedure TShareman.OnSeedingDelete(ASeeding: ISeeding);
+procedure TBittorrent.OnSeedingDelete(ASeeding: ISeeding);
 begin
   Lock;
   try
@@ -1142,32 +1142,32 @@ begin
   end;
 end;
 
-procedure TShareman.OnSeedingUpdateCounter(ASeeding: ISeeding; ADown, AUpl: UInt64);
+procedure TBittorrent.OnSeedingUpdateCounter(ASeeding: ISeeding; ADown, AUpl: UInt64);
 begin
   (FCounter as IMutableCounter).Add(ADown, AUpl);
 end;
 
-procedure TShareman.SetBlackListTime(const Value: Integer);
+procedure TBittorrent.SetBlackListTime(const Value: Integer);
 begin
   Assert(Value >= 0);
   FBlackListTime := Value;
 end;
 
-procedure TShareman.SetOnActivateSeeding(const Value: TProc<IPeer, TUniString>);
+procedure TBittorrent.SetOnActivateSeeding(const Value: TProc<IPeer, TUniString>);
 begin
   FOnActivateSeeding := Value;
 end;
 
-procedure TShareman.Start;
+procedure TBittorrent.Start;
 begin
   FListener.Active := True;
 
   FTerminated := False;
 
-  FThreads.Exec(Integer(TShareman), SyncSeedings);
+  FThreads.Exec(Integer(TBittorrent), SyncSeedings);
 end;
 
-function TShareman.StartUnit(const AInfoHash: TUniString): Boolean;
+function TBittorrent.StartUnit(const AInfoHash: TUniString): Boolean;
 begin
   Lock;
   try
@@ -1180,13 +1180,13 @@ begin
   end;
 end;
 
-procedure TShareman.Stop;
+procedure TBittorrent.Stop;
 begin
   FListener.Active := False;
   FTerminated := True;
 end;
 
-function TShareman.StopUnit(const AInfoHash: TUniString): Boolean;
+function TBittorrent.StopUnit(const AInfoHash: TUniString): Boolean;
 begin
   Lock;
   try
@@ -1199,7 +1199,7 @@ begin
   end;
 end;
 
-function TShareman.SyncSeedings: Boolean;
+function TBittorrent.SyncSeedings: Boolean;
 var
   key: TUniString;
   h: string;
@@ -1271,12 +1271,12 @@ begin
   Unlock;
 
   if not FTerminated then
-    FThreads.Schedule(Integer(TShareman), 1, SyncSeedings);
+    FThreads.Schedule(Integer(TBittorrent), 1, SyncSeedings);
 
   Result := False;
 end;
 
-procedure TShareman.Unlock;
+procedure TBittorrent.Unlock;
 begin
   System.TMonitor.Exit(FLock);
 end;
