@@ -788,6 +788,9 @@ type
 
   EMetafileException = class(EBittorrentException);
 
+  ETrackerException = class(EBittorrentException);
+  ETrackerFailure = class(ETrackerException);
+
   EServerException = class(EBittorrentException);
   EPeerSelfConnect = class(EServerException);
   EInvalidPeer = class(EServerException);

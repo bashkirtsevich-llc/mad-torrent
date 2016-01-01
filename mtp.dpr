@@ -46,7 +46,8 @@ uses
   Bittorrent.Server in 'bittorrent\Bittorrent.Server.pas',
   Bittorrent.Tracker in 'bittorrent\Bittorrent.Tracker.pas',
   IdIOHandlerHelper in 'indy\IdIOHandlerHelper.pas',
-  Bittorrent.Extensions in 'bittorrent\Bittorrent.Extensions.pas';
+  Bittorrent.Extensions in 'bittorrent\Bittorrent.Extensions.pas',
+  Bittorrent.Tracker.HTTP in 'bittorrent\Bittorrent.Tracker.HTTP.pas';
 
 {$R *.res}
 
