@@ -4,23 +4,27 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Generics.Collections, System.DateUtils,
-  System.Math,
-  Bittorrent, Bittorrent.Bitfield, Bittorrent.Utils, Basic.UniString;
+  System.Math, System.IOUtils, System.Hash,
+  Common.SHA1,
+  Bittorrent, Bittorrent.Bitfield,
+  Basic.UniString;
 
 type
   TFileSystem = class(TInterfacedObject, IFileSystem)
   private
     const
       FileTTL       = 30; { секунд }
-      PieceTTL      = 5;  { секунд }
+      {$IFDEF PUBL_UTIL}
+      PieceTTL      = 1;  { секунд }
+      {$ELSE}
+      PieceTTL      = 10; { секунд }
+      {$ENDIF}
   private
     type
-      TFilePoolTriplet = record
-        FilePath: string;
+      TFilePoolPair = record
         Stream: TStream;
         LastRequest: TDateTime;
-        constructor Create(const AFilePath: string; AStream: TStream;
-          ALastRequest: TDateTime);
+        constructor Create(AStream: TStream; ALastRequest: TDateTime);
       end;
 
       TPiecePoolPair = record
@@ -28,11 +32,14 @@ type
         LastRequest: TDateTime;
         constructor Create(const APiece: IPiece; ALastRequest: TDateTime);
       end;
-  private
+  protected
     FMetaFile: IMetaFile; { метаинформация }
     FDownloadFolder: string;
-    FFileCache: TList<TFilePoolTriplet>;
-    FPieceCache: TList<TPiecePoolPair>;
+  private
+    FFileCache: TDictionary<string, TFilePoolPair>;
+    {$IFNDEF PUBL_UTIL}
+    FPieceCache: TDictionary<Integer, TPiecePoolPair>;
+    {$ENDIF}
     FLock: TObject;
     FOnChange: TProc<IFileSystem>;
   private
@@ -44,14 +51,15 @@ type
     function GetOnChange: TProc<IFileSystem>; inline;
     procedure SetOnChange(Value: TProc<IFileSystem>); inline;
 
-    procedure ClearCaches;
+    procedure ClearCaches(AFullClear: Boolean = False);
     function CheckFiles: TBitField;
 
     procedure DeleteFiles;
 
-    function PieceCheck(APiece: IPiece): Boolean; inline;
+    function PieceCheck(APiece: IPiece): Boolean;
     procedure PieceWrite(APiece: IPiece);
-    function GetPiece(APieceIndex: Integer): IPiece;
+    function ReadPiece(APieceIndex: Integer): IPiece;
+    function GetPiece(APieceIndex: Integer): IPiece; inline;
 
     function OpenFile(AFileItem: IFileItem): TStream;
   public
@@ -66,25 +74,38 @@ uses
 
 { TFileSystem }
 
-procedure TFileSystem.ClearCaches;
+procedure TFileSystem.ClearCaches(AFullClear: Boolean = False);
 var
-  i: Integer;
+  i, j: Integer;
+  t: TDateTime;
+  s: string;
 begin
   { удаляем из пула то, что давно не используется }
   Lock;
   try
-    for i := FFileCache.Count - 1 downto 0 do
-      with FFileCache[i] do
-        if SecondsBetween(UtcNow, LastRequest) >= FileTTL then
+    t := Now;
+    for i := FFileCache.Keys.Count - 1 downto 0 do //s in FFileCache.Keys do
+    begin
+      s := FFileCache.Keys.ToArray[i];
+
+      with FFileCache[s] do
+        if AFullClear or (SecondsBetween(t, LastRequest) >= FileTTL) then
         begin
           Stream.Free;
-          FFileCache.Delete(i);
+          FFileCache.Remove(s);
         end;
+    end;
 
-    for i := FPieceCache.Count - 1 downto 0 do
-      with FPieceCache[i] do
-        if SecondsBetween(UtcNow, LastRequest) >= PieceTTL then
-          FPieceCache.Delete(i);
+    {$IFNDEF PUBL_UTIL}
+    for i := FPieceCache.Keys.Count - 1 downto 0 do
+    begin
+      j := FPieceCache.Keys.ToArray[i];
+
+      with FPieceCache[j] do
+        if AFullClear or (SecondsBetween(t, LastRequest) >= PieceTTL) then
+          FPieceCache.Remove(j);
+    end;
+    {$ENDIF}
   finally
     Unlock;
   end;
@@ -96,40 +117,38 @@ begin
   FMetaFile := AMetaFile;
   FDownloadFolder := ADownloadFolder;
 
-  FFileCache := TList<TFilePoolTriplet>.Create;
-  FPieceCache := TList<TPiecePoolPair>.Create;
+  FFileCache := TDictionary<string, TFilePoolPair>.Create;
+  {$IFNDEF PUBL_UTIL}
+  FPieceCache := TDictionary<Integer, TPiecePoolPair>.Create;
+  {$ENDIF}
   FLock := TObject.Create;
 end;
 
 procedure TFileSystem.DeleteFiles;
 var
-  it: IFileItem;
   s: string;
 begin
   Lock;
   try
-    ClearCaches;
+    ClearCaches(True);
 
-    for it in FMetaFile.Files do
-    begin
-      s := IncludeTrailingPathDelimiter(FDownloadFolder) + it.FilePath;
-      //FileSetAttr(s, 0);
-      DeleteFile(s);
-    end;
+    s := ExcludeTrailingPathDelimiter(FDownloadFolder);
+
+    if TDirectory.Exists(s) then
+      TDirectory.Delete(s, True);
   finally
     Unlock;
   end;
 end;
 
 destructor TFileSystem.Destroy;
-var
-  it: TFilePoolTriplet;
 begin
   // удаляем всё из пула
-  for it in FFileCache do
-    it.Stream.Free;
+  ClearCaches(True);
 
+  {$IFNDEF PUBL_UTIL}
   FPieceCache.Free;
+  {$ENDIF}
   FFileCache.Free;
   FLock.Free;
   inherited;
@@ -147,8 +166,176 @@ end;
 
 function TFileSystem.GetPiece(APieceIndex: Integer): IPiece;
 var
-  i: Integer;
   it: TPiecePoolPair;
+begin
+  Lock;
+  try
+    {$IFNDEF PUBL_UTIL}
+    if FPieceCache.ContainsKey(APieceIndex) then
+    begin
+      it := FPieceCache[APieceIndex];
+      it.LastRequest := Now;
+
+      FPieceCache.AddOrSetValue(APieceIndex, it);
+
+      Exit(it.Piece);
+    end;
+    {$ENDIF}
+
+    Result := ReadPiece(APieceIndex);
+
+    {$IFNDEF PUBL_UTIL}
+    if Assigned(Result) then
+      FPieceCache.Add(APieceIndex, TPiecePoolPair.Create(Result, Now));
+    {$ENDIF}
+  finally
+    Unlock;
+  end;
+end;
+
+function TFileSystem.CheckFiles: TBitField;
+
+  procedure NormalizePieceIndex(var APiece: Integer; ASign: TValueSign;
+    AItem: IFileItem);
+  begin
+    {TODO -oMAD -cMedium : проверить скорость работы этой ф-ии, насколько шустро работает FilesByPiece}
+//    while True do
+//      with FMetaFile.FilesByPiece[APiece] do
+//        if IsEmpty or ((Count = 1) and (First.HashCode = AItem.HashCode)) then
+//          Break
+//        else
+//          Inc(APiece, ASign);
+  end;
+
+var
+  it: IFileItem;
+  p: IPiece;
+  i, j, k: Integer;
+begin
+  Assert(Assigned(FMetaFile));
+
+  Result := TBitField.Create(FMetaFile.PiecesCount);
+
+  Lock;
+  try
+    { проверяем только существующие файлы }
+    for it in FMetaFile.Files do
+      if TFile.Exists(IncludeTrailingPathDelimiter(FDownloadFolder) + it.FilePath) then
+      begin
+        j := it.FirstPiece;
+        k := it.LastPiece;
+
+        { проверяем только те куски, которые входят в файл целиком, исключая граничные случаи (иначе соседний файл создастся) }
+        NormalizePieceIndex(j, PositiveValue, it);
+        NormalizePieceIndex(k, NegativeValue, it);
+
+        for i := j to k do
+        begin
+          p := ReadPiece(i);
+          Result[i] := Assigned(p) and PieceCheck(p);
+        end;
+      end;
+  finally
+    Unlock;
+  end;
+end;
+
+function TFileSystem.OpenFile(AFileItem: IFileItem): TStream;
+var
+  it: TFilePoolPair;
+  s: string;
+  mode: Word;
+begin
+  { ищем в пуле }
+  s := AFileItem.FilePath;
+  if FFileCache.ContainsKey(s) then
+  begin
+    it := FFileCache[s];
+    it.LastRequest := Now; { обновляем время }
+
+    FFileCache.AddOrSetValue(s, it);
+
+    Exit(it.Stream);
+  end;
+
+  { создаем/открываем новый }
+  s := IncludeTrailingPathDelimiter(FDownloadFolder) + AFileItem.FilePath;
+  TDirectory.CreateDirectory(ExtractFilePath(s));
+  {$IFDEF PUBL_UTIL}
+  Assert(FileExists(s), 'file not exists ' + s);
+  Result := TFileStream.Create(s, fmOpenRead or fmShareDenyWrite);
+  {$ELSE}
+  // открыть файл на чтение и запись с запретом записи извне
+  mode := System.Math.IfThen(TFile.Exists(s), fmOpenReadWrite, fmCreate) or fmShareDenyWrite;
+
+  Result := TFileStream.Create(s, mode);
+
+  if mode and fmCreate = fmCreate then
+    Result.Size := AFileItem.FileSize;
+  {$ENDIF}
+
+  FFileCache.Add(AFileItem.FilePath, TFilePoolPair.Create(Result, Now));
+end;
+
+function TFileSystem.PieceCheck(APiece: IPiece): Boolean;
+begin
+  with APiece do
+    Result := SHA1(Data) = FMetaFile.PieceHash[Index];
+end;
+
+procedure TFileSystem.PieceWrite(APiece: IPiece);
+var
+  fi: IFileItem;
+  offset: UInt64;
+  first: Boolean;
+  i, got: Integer;
+  buf: TUniString;
+begin
+  if PieceCheck(APiece) then
+  begin
+    Lock;
+    try
+      got := 0;
+      first := True;
+      buf.Assign(APiece.Data); // почему так?
+
+      for fi in FMetaFile.FilesByPiece[APiece.Index] do
+      begin
+        { абсолютное смещение куска }
+        offset := FMetaFile.PieceOffset[APiece.Index];
+
+        try
+          with OpenFile(fi) do
+          begin
+            { переход на смещение, соответствующее индексу куска }
+            if first then
+              Position := offset - fi.FileOffset
+            else
+              Position := 0;
+
+            { запись }
+            i := Min(Size - Position, buf.Len - got);
+            got := got + Write(buf.DataPtr[got]^, i);
+          end;
+        except
+          on E: Exception do
+            raise EFileSystemWriteException.Create(Format('Piece write error (file: %s) - %s', [fi.FilePath, E.Message]));
+        end;
+
+        first := False;
+      end;
+
+      if Assigned(FOnChange) then
+        FOnChange(Self);
+    finally
+      Unlock;
+    end;
+  end else
+    raise EFileSystemCheckException.CreateFmt('Piece %d corrupted', [APiece.Index]);
+end;
+
+function TFileSystem.ReadPiece(APieceIndex: Integer): IPiece;
+var
   fi: IFileItem;
   first: Boolean;
   offset: UInt64;
@@ -157,17 +344,6 @@ var
 begin
   Lock;
   try
-    for i := 0 to FPieceCache.Count - 1 do
-    begin
-      it := FPieceCache[i];
-      if it.Piece.Index = APieceIndex then
-      begin
-        it.LastRequest := UtcNow;
-        FPieceCache[i] := it;
-        Exit(it.Piece);
-      end;
-    end;
-
     { абсолютное смещение куска }
     got := 0;
     buf.Len := FMetaFile.PieceLength[APieceIndex];
@@ -192,117 +368,13 @@ begin
       first := False;
     end;
 
-    Assert(buf.Len = got, 'unexpected buffer size');
-    Result := TPiece.Create(APieceIndex, buf.Len, 0, buf);
+    Assert(buf.Len = got, 'Unexpected buffer size');
 
-    FPieceCache.Add(TPiecePoolPair.Create(Result, UtcNow));
+    Result := TPiece.Create(APieceIndex, buf.Len, 0, buf,
+      FMetaFile.PieceHash[APieceIndex]);
   finally
     Unlock;
   end;
-end;
-
-function TFileSystem.CheckFiles: TBitField;
-var
-  p: IPiece;
-  i: Integer;
-begin
-  Assert(Assigned(FMetaFile));
-
-  Result := TBitField.Create(FMetaFile.PiecesCount);
-
-  Lock;
-  try
-    i := 0;
-    while i < FMetaFile.PiecesCount do
-    begin
-      // надо пропускать только что созданные файлы, на них падает скорость
-      p := GetPiece(i);
-      Result[i] := Assigned(p) and PieceCheck(p);
-      Inc(i);
-    end;
-  finally
-    Unlock;
-  end;
-end;
-
-function TFileSystem.OpenFile(AFileItem: IFileItem): TStream;
-var
-  it: TFilePoolTriplet;
-  i: Integer;
-  s: string;
-begin
-  { ищем в пуле }
-  for i := 0 to FFileCache.Count - 1 do
-  begin
-    it := FFileCache[i];
-
-    if it.FilePath = AFileItem.FilePath then
-    begin
-      it.LastRequest := UtcNow; { обновляем время }
-      FFileCache[i] := it;
-      Exit(it.Stream);
-    end;
-  end;
-
-  { создаем/открываем новый }
-  s := IncludeTrailingPathDelimiter(FDownloadFolder) + AFileItem.FilePath;
-  ForceDirectories(ExtractFilePath(s));
-  Result := TFileStream.Create(s, System.Math.IfThen(FileExists(s), fmOpenReadWrite,
-    fmCreate));
-  Result.Size := AFileItem.FileSize;
-
-  FFileCache.Add(TFilePoolTriplet.Create(AFileItem.FilePath, Result, UtcNow));
-end;
-
-function TFileSystem.PieceCheck(APiece: IPiece): Boolean;
-begin
-  Result := FMetaFile.PieceHash[APiece.Index] = SHA1(APiece.Data);
-end;
-
-procedure TFileSystem.PieceWrite(APiece: IPiece);
-var
-  fi: IFileItem;
-  offset: UInt64;
-  first: Boolean;
-  i, got: Integer;
-  buf: TUniString;
-begin
-  if PieceCheck(APiece) then
-  begin
-    Lock;
-    try
-      got := 0;
-      first := True;
-      buf.Assign(APiece.Data); // почему так?
-
-      for fi in FMetaFile.FilesByPiece[APiece.Index] do
-      begin
-        { абсолютное смещение куска }
-        offset := FMetaFile.PieceOffset[APiece.Index];
-
-        with OpenFile(fi) do
-        begin
-          { переход на смещение, соответствующее индексу куска }
-          if first then
-            Position := offset - fi.FileOffset
-          else
-            Position := 0;
-
-          { запись }
-          i := Min(Size - Position, buf.Len - got);
-          got := got + Write(buf.DataPtr[got]^, i);
-        end;
-
-        first := False;
-      end;
-
-      if Assigned(FOnChange) then
-        FOnChange(Self);
-    finally
-      Unlock;
-    end;
-  end else
-    raise EFileSystemCheckException.CreateFmt('Piece %d corrupted', [APiece.Index]);
 end;
 
 procedure TFileSystem.Lock;
@@ -327,10 +399,9 @@ end;
 
 { TFileSystem.TFilePoolTriplet }
 
-constructor TFileSystem.TFilePoolTriplet.Create(const AFilePath: string;
-  AStream: TStream; ALastRequest: TDateTime);
+constructor TFileSystem.TFilePoolPair.Create(AStream: TStream;
+  ALastRequest: TDateTime);
 begin
-  FilePath := AFilePath;
   Stream := AStream;
   LastRequest := ALastRequest;
 end;

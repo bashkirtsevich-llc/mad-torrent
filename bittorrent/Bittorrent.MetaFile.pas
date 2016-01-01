@@ -4,13 +4,16 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Generics.Collections, System.Math,
-  Spring.Collections,
-  Bittorrent, Basic.UniString, Basic.Bencoding, Bittorrent.Utils;
+  System.IOUtils, System.Types, System.Hash,
+  Common.Prelude, Common.SHA1,
+  Bittorrent, Basic.UniString, Basic.Bencoding;
 
 type
   TMetafile = class(TInterfacedObject, IMetaFile)
   private
     const
+      AnnounceKey     = 'announce';
+      AnnounceListKey = 'announce-list';
       InfoKey         = 'info';
       FilesKey        = 'files';
       NameKey         = 'name';
@@ -19,47 +22,171 @@ type
       PiecesKey       = 'pieces';
       PieceLengthKey  = 'piece length';
   private
-    FTotalSize: UInt64;
-    FFiles: TList<IFileItem>;
-    FPieceLength: Integer;
     FInfoHash: TUniString;
-    FInfoDict: IBencodedDictionary;
-    FPieceHashes: TList<TUniString>; { список хешей кусоков }
-    FMetadataSize: Integer;
+    FFiles: TList<IFileItem>;
+    FPieceHashes: TArray<TUniString>;
+    FPieceLength: Integer;
+    FTotalSize: UInt64;
+    FTrackers: TList<string>;
 
     function GetTotalSize: UInt64; inline;
-    function GetPieceHash(Index: Integer): TUniString; inline;
+    function GetPieceHash(APieceIndex: Integer): TUniString; inline;
     function GetPieceLength(APieceIndex: Integer): Integer; inline;
     function GetPieceOffset(APieceIndex: Integer): Int64; inline;
     function GetPiecesCount: Integer; inline;
     function GetPiecesLength: Integer; inline;
-    function GetFilesByPiece(Index: Integer): IList<IFileItem>;
-    function GetFiles: IList<IFileItem>;
+    function GetFilesByPiece(APieceIndex: Integer): TArray<IFileItem>;
+    function GetFiles: TEnumerable<IFileItem>; inline;
+    function GetFilesCount: Integer; inline;
     function GetInfoHash: TUniString; inline;
-    function GetMetadataSize: Integer; inline;
-    function GetMetadata: TUniString; inline;
-
-    procedure LoadFromStream(AStream: TStream);
-    procedure SaveToStream(AStream: TStream);
+    function GetMetadata: TUniString;
+    function GetTrackers: TEnumerable<string>; inline;
   public
     constructor Create(const AFileName: string); overload;
-    constructor Create(const AData: TUniString); overload;
     constructor Create(AStream: TStream); overload;
+    constructor Create(const AMetadata: TUniString); overload;
     destructor Destroy; override;
   end;
 
 implementation
 
 uses
-  Spring.Collections.Lists, Bittorrent.FileItem;
+  Bittorrent.FileItem;
 
 { TMetafile }
+
+constructor TMetafile.Create(const AMetadata: TUniString);
+begin
+  inherited Create;
+
+  FFiles    := TList<IFileItem>.Create;
+  FTrackers := TList<string>.Create;
+
+  BencodeParse(AMetadata, False,
+    function (ALen: Integer; AValue: IBencodedValue): Boolean
+    var
+      infoDict: IBencodedDictionary;
+    begin
+      Assert(Supports(AValue, IBencodedDictionary));
+
+      infoDict := AValue as IBencodedDictionary;
+
+      if infoDict.ContainsKey(AnnounceKey) then
+      begin
+        Assert(Supports(infoDict[AnnounceKey], IBencodedString));
+
+        with infoDict[AnnounceKey] as IBencodedString do
+          if string(Value).Contains('http://') then // временный фильтр, пропускающий только HTTP трекеры
+            FTrackers.Add(string(Value));
+      end;
+
+      if infoDict.ContainsKey(AnnounceListKey) then
+      begin
+        Assert(Supports(infoDict[AnnounceListKey], IBencodedList));
+
+        TPrelude.Foreach<IBencodedValue>(
+          (infoDict[AnnounceListKey] as IBencodedList).Childs.ToArray,
+          procedure (AItem1: IBencodedValue)
+          begin
+            Assert(Supports(AItem1, IBencodedList));
+
+            TPrelude.Foreach<IBencodedValue>(
+              (AItem1 as IBencodedList).Childs.ToArray,
+              procedure (AItem2: IBencodedValue)
+              begin
+                Assert(Supports(AItem2, IBencodedString));
+
+                with AItem2 as IBencodedString do
+                  if string(Value).Contains('http://') and not FTrackers.Contains(string(Value)) then
+                    FTrackers.Add(string(Value));
+              end);
+          end);
+      end;
+
+      if infoDict.ContainsKey(InfoKey) then
+      begin
+        Assert(Supports(infoDict[InfoKey], IBencodedDictionary));
+        infoDict := infoDict[InfoKey] as IBencodedDictionary;
+      end;
+
+      with infoDict do
+      begin
+        FInfoHash := SHA1(Encode);
+
+        Assert(ContainsKey(PiecesKey));
+        with Items[PiecesKey] as IBencodedString do
+          FPieceHashes := Value.Split(SHA1HashLen);
+
+        Assert(ContainsKey(PieceLengthKey));
+        with Items[PieceLengthKey] as IBencodedInteger do
+          FPieceLength := Value;
+
+        FTotalSize := 0;
+
+        if ContainsKey(FilesKey) then
+        begin
+          { торрент с множеством файлов }
+          TPrelude.Foreach<IBencodedValue>(
+            (Items[FilesKey] as IBencodedList).Childs.ToArray,
+            procedure (AItem: IBencodedValue)
+            begin
+              Assert(Supports(AItem, IBencodedDictionary));
+
+              with AItem as IBencodedDictionary do
+              begin
+                Assert(ContainsKey(PathKey) and Supports(Items[PathKey],
+                  IBencodedList));
+                Assert(ContainsKey(LengthKey) and Supports(Items[LengthKey],
+                  IBencodedInteger));
+
+                Inc(FTotalSize, FFiles[FFiles.Add(
+                  TFileItem.Create(
+                    TPrelude.Fold<IBencodedValue, string>(
+                      (Items[PathKey] as IBencodedList).Childs.ToArray,
+                      string.Empty, function (X: string; Y: IBencodedValue): string
+                      begin
+                        Assert(Supports(Y, IBencodedString));
+
+                        Result := X + PathDelim + UTF8ToString(
+                          (Y as IBencodedString).Value.AsRawByteString
+                        );
+                      end),
+                    (Items[LengthKey] as IBencodedInteger).Value,
+                    FTotalSize,
+                    FPieceLength
+                  ))].FileSize
+                );
+              end;
+            end
+          );
+        end else
+        begin
+          if ContainsKey(NameKey) and ContainsKey(LengthKey) then
+          begin
+            { торрент с одним файлом }
+            Assert(Supports(Items[NameKey], IBencodedString));
+            Assert(Supports(Items[LengthKey], IBencodedInteger));
+
+            FTotalSize := FFiles[FFiles.Add(TFileItem.Create(
+                UTF8ToString((Items[NameKey] as IBencodedString).Value.AsRawByteString),
+                (Items[LengthKey] as IBencodedInteger).Value,
+                0,
+                FPieceLength)
+            )].FileSize;
+          end else
+            raise EMetafileException.Create('Invalid metafile structure');
+        end;
+      end;
+
+      Result := True;
+    end);
+end;
 
 constructor TMetafile.Create(const AFileName: string);
 var
   fs: TFileStream;
 begin
-  fs := TFileStream.Create(AFileName, fmOpenRead);
+  fs := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyWrite);
   try
     Create(fs);
   finally
@@ -67,67 +194,54 @@ begin
   end;
 end;
 
-constructor TMetafile.Create(const AData: TUniString);
-var
-  ms: TMemoryStream;
-begin
-  ms := TMemoryStream.Create;
-  try
-    ms.Write(AData.DataPtr[0]^, AData.Len);
-    ms.Position := 0;
-    Create(ms);
-  finally
-    ms.Free;
-  end;
-end;
-
 constructor TMetafile.Create(AStream: TStream);
+var
+  md: TUniString;
 begin
-  inherited Create;
-  FFiles := System.Generics.Collections.TList<IFileItem>.Create;
-  FPieceHashes := System.Generics.Collections.TList<TUniString>.Create;
+  md.Len := AStream.Size;
+  AStream.Read(md.DataPtr[0]^, AStream.Size);
 
-  LoadFromStream(AStream);
+  Create(md);
 end;
 
 destructor TMetafile.Destroy;
 begin
   FFiles.Free;
-  FPieceHashes.Free;
+  FTrackers.Free;
   inherited;
 end;
 
-function TMetafile.GetFiles: IList<IFileItem>;
-var
-  it: IFileItem;
+function TMetafile.GetFilesCount: Integer;
 begin
-  Result := TList<IFileItem>.Create as IList<IFileItem>;
-
-  for it in FFiles do
-    Result.Add(it);
+  Result := FFiles.Count;
 end;
 
-function TMetafile.GetFilesByPiece(Index: Integer): IList<IFileItem>;
+function TMetafile.GetFiles: TEnumerable<IFileItem>;
+begin
+  Result := FFiles;
+end;
+
+function TMetafile.GetFilesByPiece(APieceIndex: Integer): TArray<IFileItem>;
 var
   it: IFileItem;
-  absOffset: UInt64;
+  offs, absOffset: UInt64;
 begin
-  Result := TList<IFileItem>.Create as IList<IFileItem>;
-
-  absOffset := Index * FPieceLength; { абсолютное смещение }
+  { абсолютное смещение }
+  absOffset := UInt64(UInt64(APieceIndex) * UInt64(FPieceLength));
 
   Assert(absOffset <= FTotalSize);
 
   for it in FFiles do
   begin
-    if it.FileOffset + it.FileSize >= absOffset then
-      Result.Add(it);
+    offs := it.FileOffset + it.FileSize;
+    if offs >= absOffset then
+      TAppender.Append<IFileItem>(Result, it);
 
-    if it.FileOffset + it.FileSize >= absOffset + FPieceLength then
+    if offs >= absOffset + FPieceLength then
       Break;
   end;
 
-  Assert(Result.Count > 0);
+  Assert(Length(Result) > 0);
 end;
 
 function TMetafile.GetInfoHash: TUniString;
@@ -137,18 +251,13 @@ end;
 
 function TMetafile.GetMetadata: TUniString;
 begin
-  Result := FInfoDict.Encode;
+//  Result := FMetadata;
+  // build metafile
 end;
 
-function TMetafile.GetMetadataSize: Integer;
+function TMetafile.GetPieceHash(APieceIndex: Integer): TUniString;
 begin
-  Result := FMetadataSize;
-end;
-
-function TMetafile.GetPieceHash(Index: Integer): TUniString;
-begin
-  Result.Len := 0;
-  Result.Assign(FPieceHashes[Index]);
+  Result := FPieceHashes[APieceIndex];
 end;
 
 function TMetafile.GetPieceLength(APieceIndex: Integer): Integer;
@@ -184,107 +293,9 @@ begin
   Result := FTotalSize;
 end;
 
-procedure TMetafile.LoadFromStream(AStream: TStream);
-var
-  buf: TUniString;
+function TMetafile.GetTrackers: TEnumerable<string>;
 begin
-  FTotalSize := 0;
-
-  FMetadataSize := AStream.Size - AStream.Position;
-  buf.Len := FMetadataSize;
-  AStream.Read(buf.DataPtr[0]^, FMetadataSize);
-
-  BencodeParse(buf, False,
-    function (ALen: Integer; AValue: IBencodedValue): Boolean
-    var
-      it1, it2: IBencodedValue;
-      i: Integer;
-      fPath: string;
-      fSize: UInt64;
-    begin
-      Assert(Supports(AValue, IBencodedDictionary));
-
-      FInfoDict := AValue as IBencodedDictionary;
-      if FInfoDict.ContainsKey(InfoKey) then
-      begin
-        Assert(Supports(FInfoDict[InfoKey], IBencodedDictionary));
-        FInfoDict := FInfoDict[InfoKey] as IBencodedDictionary;
-      end;
-
-      with FInfoDict do
-      begin
-        FInfoHash := SHA1(Encode);
-
-        Assert(ContainsKey(PiecesKey));
-        it1 := (Items[PiecesKey] as IBencodedString);
-        with it1 as IBencodedString do
-        begin
-          Assert(Value.Len mod 20 = 0);
-          { проверить, что суммарный объем кусков не превышает размер торрента }
-
-          for i := 0 to (Value.Len div 20) - 1 do
-            FPieceHashes.Add(Value.Copy(i*20, 20));
-        end;
-
-        Assert(ContainsKey(PieceLengthKey));
-        it1 := (Items[PieceLengthKey] as IBencodedInteger);
-        FPieceLength := (it1 as IBencodedInteger).Value;
-
-        if ContainsKey(FilesKey) then
-        begin
-          for it1 in (Items[FilesKey] as IBencodedList).Childs do
-          begin
-            Assert(Supports(it1, IBencodedDictionary));
-            with it1 as IBencodedDictionary do
-            begin
-              fPath := '';
-
-              Assert(ContainsKey(PathKey));
-              Assert(Supports(Items[PathKey], IBencodedList));
-
-              { вычленяем путь }
-              for it2 in (Items[PathKey] as IBencodedList).Childs do
-              begin
-                Assert(Supports(it2, IBencodedString));
-                fPath := fPath + PathDelim + (it2 as IBencodedString).Value.AsString;
-              end;
-
-              Assert(ContainsKey(LengthKey));
-              fSize := (Items[LengthKey] as IBencodedInteger).Value;
-
-              // FTotalSize в данном случае есть абсолютное смещение
-              FFiles.Add(TFileItem.Create(fPath, fSize, FTotalSize) as IFileItem);
-              Inc(FTotalSize, fSize);
-            end;
-          end;
-        end else
-        begin
-          if ContainsKey(NameKey) and ContainsKey(LengthKey) then
-          begin
-            { торрент с одним файлом }
-            Assert(Supports(Items[NameKey], IBencodedString));
-
-            fPath := (Items[NameKey] as IBencodedString).Value;
-            Assert(Supports(Items[LengthKey], IBencodedInteger));
-
-            fSize := (Items[LengthKey] as IBencodedInteger).Value;
-            FFiles.Add(TFileItem.Create(fPath, fSize, FTotalSize) as IFileItem);
-            Inc(FTotalSize, fSize);
-          end else
-            raise Exception.Create('Invalid metafile structure');
-        end;
-      end;
-
-      Result := True;
-    end);
-end;
-
-procedure TMetafile.SaveToStream(AStream: TStream);
-var
-  data: TUniString;
-begin
-  data := GetMetadata;
-  AStream.Write(data.DataPtr[0]^, data.Len);
+  Result := FTrackers;
 end;
 
 end.

@@ -18,12 +18,12 @@ type
     procedure ZeroUnusedBits;
     function GetAllTrue: Boolean; inline;
     function GetAllFalse: Boolean; inline;
-    function GetAsUniString: TUniString;
     function GetBit(Index: Integer): Boolean; inline;
     procedure SetBit(Index: Integer; const Value: Boolean);
 
     function GetLen: Integer; inline;
     function GetCheckedCount: Integer; inline;
+    function GetCheckedIndexes: TArray<Integer>;
     function GetLengthInBytes: Integer; inline;
   public
     class operator BitwiseXor(const A, B: TBitField): TBitField;
@@ -35,16 +35,25 @@ type
     property AllTrue: Boolean read GetAllTrue;
     property AllFalse: Boolean read GetAllFalse;
     property CheckedCount: Integer read GetCheckedCount;
-    property AsUniString: TUniString read GetAsUniString;
+    property CheckedIndexes: TArray<Integer> read GetCheckedIndexes;
     property Bits[Index: Integer]: Boolean read GetBit write SetBit; default;
 
+    function CheckedCountInRange(AStartIndex, AEndIndex: Integer): Integer;
+    function CheckedIndexesInRange(AStartIndex, AEndIndex: Integer): TArray<Integer>;
+
+    procedure CopyFrom(const A: TBitField); overload; inline; //experimental
+    procedure CopyFrom(const A: TBitField; AFrom, ALen: Integer); overload; //experimental
+
+    function AsUniString(AHostFormat: Boolean = False): TUniString;
+
+    {Переделать реализации FirstTrue и FirstFalse, ибо там какая-то лажа напрограммирована}
     function FirstTrue: Integer; overload; inline;
     function FirstTrue(AStartIndex, AEndIndex: Integer): Integer; overload;
 
     function FirstFalse: Integer; overload; inline;
     function FirstFalse(AStartIndex, AEndIndex: Integer): Integer; overload;
 
-    constructor FromUniString(const AData: TUniString);
+    constructor FromUniString(const AData: TUniString; AHostFormat: Boolean = False);
     constructor Create(ALength: Integer);
   private
     class procedure Check(const A, B: TBitField); static; inline;
@@ -60,6 +69,8 @@ type
     class operator Add(const A, B: TBitSum): TBitSum;
     class operator Add(const A: TBitSum; B: TBitField): TBitSum;
     class operator Add(const A: TBitField; B: TBitSum): TBitSum;
+
+    class operator Subtract(const A: TBitSum; B: TBitField): TBitSum;
   private
     function GetLen: Integer; inline;
   private
@@ -124,17 +135,65 @@ begin
     raise EBitFieldDifferentLengthException.Create('BitFields are of different lengths');
 end;
 
+function TBitField.CheckedCountInRange(AStartIndex, AEndIndex: Integer): Integer;
+var
+  i: Integer;
+begin
+  Assert((AStartIndex < Flen) and (AEndIndex < FLen) and (AEndIndex > AStartIndex));
+
+  Result := 0;
+
+  for i := AStartIndex to AEndIndex do
+    if GetBit(i) then
+      Inc(Result);
+end;
+
+function TBitField.CheckedIndexesInRange(AStartIndex,
+  AEndIndex: Integer): TArray<Integer>;
+var
+  i, j: Integer;
+begin
+  SetLength(Result, AEndIndex - AStartIndex);
+
+  j := 0;
+
+  for i := AStartIndex to AEndIndex do
+    if GetBit(i) then
+    begin
+      Result[j] := i;
+      Inc(j);
+    end;
+
+  SetLength(Result, j);
+end;
+
 procedure TBitField.CheckIndex(Index: Integer);
 begin
   if (Index < 0) or (Index >= FLen) then
-    raise EArgumentOutOfRangeException.CreateFmt('Index out of bounds (%d)', [Index]);
+    raise EArgumentOutOfRangeException.CreateFmt('Index out of bounds (%d from %d)', [Index, FLen]);
+end;
+
+procedure TBitField.CopyFrom(const A: TBitField; AFrom, ALen: Integer);
+var
+  i: Integer;
+begin
+  for i := 0 to Min(GetLen, Min(A.Len, ALen)) - 1 do
+    SetBit(i, A[i + AFrom]);
+
+  ZeroUnusedBits;
+end;
+
+procedure TBitField.CopyFrom(const A: TBitField);
+begin
+  CopyFrom(A, 0, Min(A.Len, GetLen));
 end;
 
 constructor TBitField.Create(ALength: Integer);
 begin
-  //Assert(ALength > 0);
+  Assert(ALength >= 0);
 
   FLen := ALength;
+  FCheckedCount := 0;
   SetLength(FBuffer, (ALength + 31) div 32);
 end;
 
@@ -204,7 +263,7 @@ begin
   end;
 end;
 
-constructor TBitField.FromUniString(const AData: TUniString);
+constructor TBitField.FromUniString(const AData: TUniString; AHostFormat: Boolean);
 var
   i, j, shift: Integer;
 begin
@@ -213,10 +272,16 @@ begin
   j := 0;
   for i := 0 to FLen div 32 - 1 do
   begin
-    FBuffer[i] := (AData[j+0] shl 24) or
-                  (AData[j+1] shl 16) or
-                  (AData[j+2] shl 8 ) or
-                  (AData[j+3] shl 0 );
+    if AHostFormat then
+      FBuffer[i] := (AData[j+0] shl 0 ) or
+                    (AData[j+1] shl 8 ) or
+                    (AData[j+2] shl 16) or
+                    (AData[j+3] shl 24)
+    else
+      FBuffer[i] := (AData[j+0] shl 24) or
+                    (AData[j+1] shl 16) or
+                    (AData[j+2] shl 8 ) or
+                    (AData[j+3] shl 0 );
     Inc(j, 4);
   end;
 
@@ -244,7 +309,7 @@ begin
   Result := FCheckedCount = FLen;
 end;
 
-function TBitField.GetAsUniString: TUniString;
+function TBitField.AsUniString(AHostFormat: Boolean): TUniString;
 var
   i, _end, shift: Integer;
 begin
@@ -252,35 +317,61 @@ begin
 
   ZeroUnusedBits;
 
-  _end := FLen div 32;
-  for i := 0 to _end - 1 do
+  if AHostFormat then
+    for i in FBuffer do
+      Result := Result + i
+  else
   begin
-    Result := Result + Byte(FBuffer[i] shr 24);
-    Result := Result + Byte(FBuffer[i] shr 16);
-    Result := Result + Byte(FBuffer[i] shr 8 );
-    Result := Result + Byte(FBuffer[i] shr 0 );
-  end;
+    _end := FLen div 32;
+    for i := 0 to _end - 1 do
+    begin
+      Result := Result + Byte(FBuffer[i] shr 24);
+      Result := Result + Byte(FBuffer[i] shr 16);
+      Result := Result + Byte(FBuffer[i] shr 8 );
+      Result := Result + Byte(FBuffer[i] shr 0 );
+    end;
 
-  shift := 24;
-  i := _end * 32;
-  while i < FLen do
-  begin
-    Result := Result + Byte(FBuffer[Length(FBuffer) - 1] shr shift);
+    shift := 24;
+    i := _end * 32;
+    while i < FLen do
+    begin
+      Result := Result + Byte(FBuffer[Length(FBuffer) - 1] shr shift);
 
-    Dec(shift, 8);
-    Inc(i, 8);
+      Dec(shift, 8);
+      Inc(i, 8);
+    end;
   end;
 end;
 
 function TBitField.GetBit(Index: Integer): Boolean;
 begin
   CheckIndex(Index);
+                               { and ($80000000 shr (Index and 31)) }
   Result := FBuffer[Index shr 5] and (1 shl (31 - (Index and 31))) <> 0;
 end;
 
 function TBitField.GetCheckedCount: Integer;
 begin
   Result := FCheckedCount;
+end;
+
+function TBitField.GetCheckedIndexes: TArray<Integer>;
+var
+  i, j: Integer;
+begin
+  SetLength(Result, FCheckedCount);
+
+  if FCheckedCount > 0 then
+  begin
+    j := 0;
+
+    for i := FirstTrue to FLen - 1 do
+      if GetBit(i) then
+      begin
+        Result[j] := i;
+        Inc(j);
+      end;
+  end;
 end;
 
 function TBitField.GetLen: Integer;
@@ -328,21 +419,26 @@ end;
 
 procedure TBitField.Validate;
 var
-  count, v: Cardinal;
-  i: Integer;
+  i, x: Integer;
 begin
   ZeroUnusedBits;
 
-  count := 0;
+  FCheckedCount := 0;
+
+  { считаем биты }
   for i := 0 to Length(FBuffer) - 1 do
   begin
-    v := FBuffer[i];
-    v := v - ((v shr 1) and $55555555);
-    v := (v and $33333333) + ((v shr 2) and $33333333);
-    count := count + (((v + (v shr 4) and $F0F0F0F) * $1010101)) shr 24;
+    x := FBuffer[i];
+    x := x and $55555555 + x shr 1  and $55555555;
+    x := x and $33333333 + x shr 2  and $33333333;
+    x := x and $0F0F0F0F + x shr 4  and $0F0F0F0F;
+    x := x and $00FF00FF + x shr 8  and $00FF00FF;
+    x := x and $0000FFFF + x shr 16 and $0000FFFF;
+
+    Inc(FCheckedCount, x);
   end;
 
-  FCheckedCount := count;
+  Assert(CheckedCount <= Len);
 end;
 
 procedure TBitField.ZeroUnusedBits;
@@ -350,7 +446,7 @@ var
   shift: Integer;
 begin
   if Length(FBuffer) = 0 then
-      Exit;
+    Exit;
 
   // Zero the unused bits
   shift := 32 - FLen mod 32;
@@ -523,6 +619,26 @@ procedure TBitSum.Inc(AIndex: Integer);
 begin
   if FSum[AIndex] < 255 then
     System.Inc(FSum[AIndex]);
+end;
+
+class operator TBitSum.Subtract(const A: TBitSum; B: TBitField): TBitSum;
+var
+  i: Integer;
+begin
+  //Check(A, B);
+  Result := TBitSum.Create(Max(A.Len, B.Len));
+
+  for i := 0 to Result.Len - 1 do
+  with Result do
+  begin
+    if i < A.Len then
+      FSum[i] := A.FSum[i]
+    else
+      FSum[i] := 0;
+
+    if (FSum[i] > 0) and (i < B.Len) then
+      System.Dec(FSum[i], System.Math.IfThen(B[i], 1, 0));
+  end;
 end;
 
 end.

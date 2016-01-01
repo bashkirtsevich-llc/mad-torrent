@@ -4,7 +4,7 @@
  * Целое число записывается так: i<число в десятичной системе счисления>e.
  *  Число не должно начинаться с нуля, но число ноль записывается как i0e.
  *  Отрицательные числа записываются со знаком минуса перед числом.
- *  Число ?42 будет выглядеть так «i-42e».
+ *  Число -42 будет выглядеть так «i-42e».
  *
  * Строка байт: <размер>:<содержимое>. Размер — это число в десятичной системе
  *  счисления; Содержимое — это непосредственно данные, представленные цепочкой
@@ -28,7 +28,7 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.Generics.Collections, Basic.UniString,
-  System.Generics.Defaults;
+  System.Generics.Defaults, System.Hash;
 
 type
   {$REGION 'interfaces'}
@@ -102,10 +102,15 @@ type
   TBencodeParseStringException  = class(TBencodeException);
   TBencodeDictPairException     = class(TBencodeException);
 
+function BencodeParse(AStream: TStream; ASorting: Boolean = True;
+  AParseCallback: TFunc<{ last position   } Integer,
+                        { parsed data     } IBencodedValue,
+                        { continue parse? } Boolean> = nil): IBencodedBase; overload; inline;
 function BencodeParse(const AData: TUniString; ASorting: Boolean = True;
   AParseCallback: TFunc<{ last position   } Integer,
                         { parsed data     } IBencodedValue,
-                        { continue parse? } Boolean> = nil): IBencodedBase;
+                        { continue parse? } Boolean> = nil): IBencodedBase; overload;
+
 function BencodeString(const AData: TUniString): IBencodedString; overload;
 function BencodeString(const AData: string): IBencodedString; overload;
 
@@ -296,7 +301,7 @@ end;
 
 function TBencodedInteger.GetHashCode: Integer;
 begin
-  Result := BobJenkinsHash(FValue, SizeOf(Int64), 0);
+  Result := THashBobJenkins.GetHashValue(FValue, SizeOf(Int64));
 end;
 
 function TBencodedInteger.GetValue: Int64;
@@ -526,7 +531,7 @@ begin
     key := TBencodeDictPair(it).GetKey;
     Assert(Supports(key, IBencodedString));
 
-    if (key as IBencodedString).Value.Copy(0, AKeyName.Len) = AKeyName then
+    if (key as IBencodedString).Value = AKeyName then
       Exit(True);
   end;
 
@@ -617,6 +622,19 @@ begin
 end;
 
 { TBencode }
+
+function BencodeParse(AStream: TStream; ASorting: Boolean = True;
+  AParseCallback: TFunc<Integer, IBencodedValue, Boolean> = nil): IBencodedBase;
+var
+  data: TUniString;
+begin
+  data.Len := AStream.Size;
+  AStream.Position := 0;
+
+  AStream.Read(data.DataPtr[0]^, AStream.Size);
+
+  Result := BencodeParse(data, ASorting, AParseCallback);
+end;
 
 function BencodeParse(const AData: TUniString; ASorting: Boolean = True;
   AParseCallback: TFunc<Integer, IBencodedValue, Boolean> = nil): IBencodedBase;
@@ -800,4 +818,3 @@ begin
 end;
 
 end.
-

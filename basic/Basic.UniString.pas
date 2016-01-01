@@ -22,7 +22,7 @@ interface
 
 uses
   System.SysUtils, System.Variants, System.Math, System.Generics.Collections,
-  System.Generics.Defaults;
+  System.Generics.Defaults, System.Hash;
 
 type
   TUniString = record
@@ -39,31 +39,34 @@ type
 
     function GetAsRawString: string; inline;
     procedure SetAsRawString(const Value: string); inline;
+
+    function GetIsEmpty: Boolean; inline;
   private
     class function memcmp(ABuf1, ABuf2: PByte; ASize: Integer): Integer; static;
+    function GetAsRawByteString: RawByteString;
   public
     // надо ли их в инлайн переводить?
-    class operator Add(const A, B: TUniString): TUniString;
+    class operator Add(const A, B: TUniString): TUniString; inline;
     class operator Add(const A: TUniString; const B: string): TUniString;
-    class operator Add(const A: TUniString; const B: Byte): TUniString;
-    class operator Add(const A: TUniString; const B: Word): TUniString;
-    class operator Add(const A: TUniString; const B: LongWord): TUniString;
-    class operator Add(const A: TUniString; const B: UInt64): TUniString;
-    class operator Add(const A: TUniString; const B: Integer): TUniString;
+    class operator Add(const A: TUniString; const B: Byte): TUniString; inline;
+    class operator Add(const A: TUniString; const B: Word): TUniString; inline;
+    class operator Add(const A: TUniString; const B: LongWord): TUniString; inline;
+    class operator Add(const A: TUniString; const B: UInt64): TUniString; inline;
+    class operator Add(const A: TUniString; const B: Integer): TUniString; inline;
 
     class operator Implicit(const A: string): TUniString;
     class operator Implicit(const A: Variant): TUniString;
-    class operator Implicit(const A: TUniString): AnsiString; // загнать под дефайн
+    class operator Implicit(const A: TUniString): AnsiString; inline; // загнать под дефайн
     class operator Implicit(const A: TUniString): string;
-    class operator Implicit(const A: TUniString): Variant;
-    class operator Implicit(const A: TUniString): TBytes;
+    class operator Implicit(const A: TUniString): Variant; inline;
+    class operator Implicit(const A: TUniString): TBytes; inline;
 
-    class operator Explicit(const A: string): TUniString;
-    class operator Explicit(const A: Variant): TUniString;
-    class operator Explicit(const A: TUniString): AnsiString; // загнать под дефайн
-    class operator Explicit(const A: TUniString): string;
-    class operator Explicit(const A: TUniString): Variant;
-    class operator Explicit(const A: TUniString): TBytes;
+    class operator Explicit(const A: string): TUniString; inline;
+    class operator Explicit(const A: Variant): TUniString; inline;
+    class operator Explicit(const A: TUniString): AnsiString; inline; // загнать под дефайн
+    class operator Explicit(const A: TUniString): string; inline;
+    class operator Explicit(const A: TUniString): Variant; inline;
+    class operator Explicit(const A: TUniString): TBytes; inline;
 
     class operator Equal(const A, B: TUniString): Boolean;
     class operator NotEqual(const A, B: TUniString): Boolean;
@@ -74,6 +77,7 @@ type
   public
     function Copy(Index, Count: Integer): TUniString; overload; inline;
     function Copy: TUniString; overload; inline;
+    function Split(ALength: Integer): TArray<TUniString>;
     procedure Delete(Index, Count: Integer);
     procedure Insert(AIndex: Integer; const AData: TUniString);
     procedure Replace(const ASource: TUniString; const Index: Integer;
@@ -83,6 +87,7 @@ type
   public
     class function FromUnicode(const AData: string): TUniString; static; inline;
     class function Compare(const A, B: TUniString; ACompareLen: Boolean = True): Integer; static; inline;
+    class function FromRandom(ALen: Integer): TUniString; static; inline;
   public
     function GetHashCode: Integer;
   public
@@ -90,6 +95,7 @@ type
     function AsString: string; inline;
     function AsUInt64: UInt64; inline;
     function AsInteger: Integer; inline;
+    function AsWord: Word; inline;
   public
     function ToHexString: string;
     function ToBase64String: string;
@@ -102,8 +108,10 @@ type
     property DataPtr[Index: Integer]: PByte read GetDataPtr;
     property Len: Integer read GetLen write SetLen;
     property Data[Index: Integer]: Byte read Get write Put; default; // переименовать
+    property Empty: Boolean read GetIsEmpty;
 
     property AsRawString: string read GetAsRawString write SetAsRawString;
+    property AsRawByteString: RawByteString read GetAsRawByteString;
   end;
 
   // синоним
@@ -119,30 +127,10 @@ type
     function Compare(const Left, Right: TUniString): Integer;
   end;
 
-type
-  TUniStringList = class;
+function ConcatUniStringList: TFunc<TUniString, TUniString, TUniString>; overload; inline;
+function ConcatUniStringList(const ASeparator: TUniString): TFunc<TUniString, TUniString, TUniString>; overload;
 
-  TUniStringEnumerator = class
-  private
-    FIndex: Integer;
-    FUniStrings: TUniStringList;
-  public
-    constructor Create(AUniStrings: TUniStringList);
-    function GetCurrent: TUniString; inline;
-    function MoveNext: Boolean;
-    property Current: TUniString read GetCurrent;
-  end;
-
-  TUniStringList = class(TList<TUniString>)
-  public
-    function AddUnique(const S: TUniString): Integer;
-    function GetEnumerator: TUniStringEnumerator; reintroduce;
-  end;
-
-{
-  Повыдергивать часть ф-й из System.StrUtils
-}
-
+// перенести в хелперы
 function IfThen(AValue: Boolean; const ATrue: TUniString;
   AFalse: TUniString): TUniString; overload; inline;
 
@@ -261,7 +249,7 @@ begin
   Result := A;
 
   l := Result.GetLen;
-  Result.SetLen(l+SizeOf(Byte));
+  Result.SetLen(l+Byte.Size);
   Result.Put(l, B);
 end;
 
@@ -272,8 +260,8 @@ begin
   Result := A;
 
   l := Result.GetLen;
-  Result.SetLen(l+SizeOf(Word));
-  Move(B, Result.FData[l], SizeOf(Word));
+  Result.SetLen(l+Word.Size);
+  Move(B, Result.FData[l], Word.Size);
 end;
 
 class operator TUniString.Add(const A: TUniString;
@@ -284,8 +272,8 @@ begin
   Result := A;
 
   l := Result.GetLen;
-  Result.SetLen(l+SizeOf(LongWord));
-  Move(B, Result.FData[l], SizeOf(LongWord));
+  Result.SetLen(l+LongWord.Size);
+  Move(B, Result.FData[l], LongWord.Size);
 end;
 
 class operator TUniString.Add(const A: TUniString; const B: UInt64): TUniString;
@@ -295,8 +283,8 @@ begin
   Result := A;
 
   l := Result.GetLen;
-  Result.SetLen(l+SizeOf(UInt64));
-  Move(B, Result.FData[l], SizeOf(UInt64));
+  Result.SetLen(l+UInt64.Size);
+  Move(B, Result.FData[l], UInt64.Size);
 end;
 
 class operator TUniString.Add(const A: TUniString; const B: Integer): TUniString;
@@ -306,8 +294,8 @@ begin
   Result := A;
 
   l := Result.GetLen;
-  Result.SetLen(l+SizeOf(Integer));
-  Move(B, Result.FData[l], SizeOf(Integer));
+  Result.SetLen(l+Integer.Size);
+  Move(B, Result.FData[l], Integer.Size);
 end;
 
 class operator TUniString.Implicit(const A: TUniString): Variant;
@@ -376,15 +364,15 @@ begin
   case v of
     varByte:
       begin
-        Result.SetLen(SizeOf(Byte));
+        Result.SetLen(Byte.Size);
         Result.FData[0] := Byte(A);
       end;
 
     varWord:
       begin
         w := Word(A);
-        Result.SetLen(SizeOf(Word));
-        Move(w, Result.DataPtr[0]^, SizeOf(Word));
+        Result.SetLen(Word.Size);
+        Move(w, Result.DataPtr[0]^, Word.Size);
       end;
 
     varArray or varByte:
@@ -396,15 +384,15 @@ begin
     varInteger, varLongWord:
       begin
         valInt := Integer(A);
-        Result.SetLen(SizeOf(Integer));
-        Move(valInt, Result.DataPtr[0]^, SizeOf(Integer));
+        Result.SetLen(Integer.Size);
+        Move(valInt, Result.DataPtr[0]^, Integer.Size);
       end;
 
     varInt64, varUInt64:
       begin
         i64 := Int64(A);
-        Result.SetLen(SizeOf(Int64));
-        Move(i64, Result.DataPtr[0]^, SizeOf(Int64));
+        Result.SetLen(Int64.Size);
+        Move(i64, Result.DataPtr[0]^, Int64.Size);
       end;
   else
     raise Exception.CreateFmt('Unsupported variant type (%d)', [v]);
@@ -415,7 +403,7 @@ end;
 function TUniString.AsInteger: Integer;
 begin
   Result := 0;
-  Move(FData[0], Result, Min(GetLen, SizeOf(Integer)));
+  Move(FData[0], Result, Min(GetLen, Integer.Size));
 end;
 
 procedure TUniString.Assign(const ASource: TUniString);
@@ -432,7 +420,13 @@ end;
 function TUniString.AsUInt64: UInt64;
 begin
   Result := 0;
-  Move(FData[0], Result, Min(GetLen, SizeOf(UInt64)));
+  Move(FData[0], Result, Min(GetLen, UInt64.Size));
+end;
+
+function TUniString.AsWord: Word;
+begin
+  Result := 0;
+  Move(FData[0], Result, Min(GetLen, Word.Size));
 end;
 
 class function TUniString.memcmp(ABuf1, ABuf2: PByte; ASize: Integer): Integer;
@@ -482,14 +476,14 @@ var
   cnt: Integer;
 begin
   cnt := IfThen(Count = 0, ASource.GetLen, Count);
-  if Index + cnt > GetLen then
-    raise Exception.Create('Count is too large');
+  Assert(Index+cnt <= GetLen, 'Count is too large');
 
   Move(ASource.GetDataPtr(0)^, GetDataPtr(0)^, cnt);
 end;
 
 function TUniString.Copy(Index, Count: Integer): TUniString;
 begin
+  Assert(Index+Count <= GetLen, 'Count is too large');
   Result.FData := System.Copy(Self.FData, Index, Count);
 end;
 
@@ -549,6 +543,12 @@ begin
     Result := 0;
 end;
 
+function TUniString.GetAsRawByteString: RawByteString;
+begin
+  SetLength(Result, GetLen);
+  Move(FData[0], Result[1], GetLen);
+end;
+
 function TUniString.GetAsRawString: string;
 begin
   SetLength(Result, GetLen div 2);
@@ -562,7 +562,12 @@ end;
 
 function TUniString.GetHashCode: Integer;
 begin
-  Result := BobJenkinsHash(FData[0], GetLen, 0);
+  Result := THashBobJenkins.GetHashValue(FData[0], GetLen);
+end;
+
+function TUniString.GetIsEmpty: Boolean;
+begin
+  Result := GetLen = 0;
 end;
 
 function TUniString.GetLen: Integer;
@@ -579,6 +584,16 @@ end;
 procedure TUniString.SetLen(const Value: Integer);
 begin
   SetLength(FData, Value);
+end;
+
+function TUniString.Split(ALength: Integer): TArray<TUniString>;
+var
+  i: Integer;
+begin
+  SetLength(Result, GetLen div ALength);
+
+  for i := 0 to Length(Result) - 1 do
+    Result[i].Assign(Copy(i * ALength, ALength));
 end;
 
 function TUniString.ToBase64String: string;
@@ -625,9 +640,28 @@ begin
     Result := Result + Get(i).ToHexString(2);
 end;
 
+class function TUniString.FromRandom(ALen: Integer): TUniString;
+begin
+  Result.Len := ALen;
+  Result.FillRandom;
+end;
+
 class function TUniString.FromUnicode(const AData: string): TUniString;
 begin
   Result.SetAsRawString(AData);
+end;
+
+function ConcatUniStringList: TFunc<TUniString, TUniString, TUniString>;
+begin
+  Result := ConcatUniStringList(string.Empty);
+end;
+
+function ConcatUniStringList(const ASeparator: TUniString): TFunc<TUniString, TUniString, TUniString>;
+begin
+  Result := function (X, Y: TUniString): TUniString
+    begin
+      Result := X + ASeparator + Y;
+    end;
 end;
 
 function IfThen(AValue: Boolean; const ATrue: TUniString;
@@ -759,26 +793,11 @@ end;
 
 function HexToUnistring(const AHex: string): TUniString;
 begin
-  Assert(Length(AHex) mod 2 = 0, 'invalid string length');
+  Assert(AHex.Length mod 2 = 0, 'invalid string length');
 
   Result.Len := 0; { для очистки памяти, на всякий случай }
   Result.Len := Length(AHex) div 2;
   HexToBin(PChar(AHex), Result.DataPtr[0]^, Result.Len);
-end;
-
-{ TUniStringList }
-
-function TUniStringList.AddUnique(const S: TUniString): Integer;
-begin
-  Result := IndexOf(S);
-
-  if Result = -1 then
-    Result := Add(S);
-end;
-
-function TUniStringList.GetEnumerator: TUniStringEnumerator;
-begin
-  Result := TUniStringEnumerator.Create(Self);
 end;
 
 { TUniStringComparer }
@@ -798,27 +817,6 @@ end;
 function TUniStringComparer.Compare(const Left, Right: TUniString): Integer;
 begin
   Result := TUniString.Compare(Left, Right);
-end;
-
-{ TUniStringEnumerator }
-
-constructor TUniStringEnumerator.Create(AUniStrings: TUniStringList);
-begin
-  inherited Create;
-  FIndex := -1;
-  FUniStrings := AUniStrings;
-end;
-
-function TUniStringEnumerator.GetCurrent: TUniString;
-begin
-  Result := FUniStrings[FIndex];
-end;
-
-function TUniStringEnumerator.MoveNext: Boolean;
-begin
-  Result := FIndex < FUniStrings.Count - 1;
-  if Result then
-    Inc(FIndex);
 end;
 
 end.

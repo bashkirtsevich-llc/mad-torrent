@@ -4,90 +4,110 @@ interface
 
 uses
   System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
-  System.Classes, System.DateUtils,
-  Basic.UniString, BusyObj, Bittorrent.Utils,
-  Bittorrent.Bitfield, Bittorrent.Server,
-  AccurateTimer,
-  IdIOHandler, IdGlobal, IdContext, IdSchedulerOfThreadPool,
-  ThreadPool,
-  Spring.Collections;
+  System.Classes, System.DateUtils, System.Math,
+  Basic.UniString,
+  Common.BusyObj, Common.ThreadPool, Common.AccurateTimer,
+  Bittorrent.Bitfield,
+  IdIOHandler, IdSocketHandle, IdGlobal, IdContext, IdStack;
 
 const
-  DefaultPeerID           = '-MD0001-MADMADMAMMAD'; // in handshake
-  DefaultClientVersion    = 'MAD Torrent 0.0.1';    // in extended handshake
   DefaultBlackListTime    = 30; { секунд }
-  DefaultSeedingIdleTime  = 5;  { минут } // время, после которого выбрасываем раздачу из списка раздач
 
 type
-  {$REGION 'Messages'}
-  IMessage = interface // переименовать бы в IPersistentMessage
-  ['{1737BD06-7CF1-4323-BC33-806EB060CD3D}']
+  IMessage = interface
+  ['{91B37A10-A79C-4586-93C3-B254CCBABD44}']
+    function GetMsgSize: Integer;
+
     procedure Send(AIOHandler: TIdIOHandler);
+
+    property MsgSize: Integer read GetMsgSize;
   end;
 
-  TFixedMessageID = (
-    idChoke         = 0,
-    idUnchoke       = 1,
-    idInterested    = 2,
-    idNotInterested = 3,
-    idHave          = 4,
-    idBitfield      = 5,
-    idRequest       = 6,
-    idPiece         = 7,
-    idCancel        = 8,
-    idPort          = 9,
-    idExtended      = 20
+  TMessageID = (
+    idChoke,
+    idUnchoke,
+    idInterested,
+    idNotInterested,
+    idHave,
+    idBitfield,
+    idRequest,
+    idPiece,
+    idCancel,
+    idPort,
+    idExtended
   );
 
-  IFixedMessage = interface(IMessage)
-  ['{EBC1F174-649A-44C0-BF94-FBD28646CBBC}']
-    function GetMessageID: TFixedMessageID;
-    //function GetPayloadSize: Integer;
+  TMessageIDHelper = record helper for TMessageID
+  private
+    const
+      MessageIDCode: array[TMessageID] of Byte = (
+        {idChoke}         0,
+        {idUnchoke}       1,
+        {idInterested}    2,
+        {idNotInterested} 3,
+        {idHave}          4,
+        {idBitfield}      5,
+        {idRequest}       6,
+        {idPiece}         7,
+        {idCancel}        8,
+        {idPort}          9,
+        {idExtended}      20
+      );
+  private
+    function GetAsByte: Byte; inline;
+    procedure SetAsByte(const Value: Byte);
+  public
+    property AsByte: Byte read GetAsByte write SetAsByte;
+    class function Parse(AValue: Byte): TMessageID; static; inline;
+  end;
 
-    property MessageID: TFixedMessageID read GetMessageID;
-    //property PayloadSize: Integer read GetPayloadSize;
+  IFixedMessage = interface(IMessage)
+  ['{F120467F-3088-4E50-815A-717798367D03}']
+    function GetMessageID: TMessageID;
+
+    property MessageID: TMessageID read GetMessageID;
   end;
 
   { пустое сообщение, или сообщение, которое не удалось идентифицировать }
   IKeepAliveMessage = interface(IMessage)
-  ['{227D6130-9669-417E-A1AC-85637A66726F}']
+  ['{E672DBB7-31E8-4B97-B6CF-A37B611EC447}']
     function GetDummy: TUniString;
 
     property Dummy: TUniString read GetDummy; { мусор }
   end;
 
   IChokeMessage = interface(IFixedMessage)
-  ['{4FC4C2CF-D5BB-4740-B5B1-F49A658844D2}']
+  ['{90A75323-8002-4E75-96B3-B0AD86107755}']
   end;
 
   IUnchokeMessage = interface(IFixedMessage)
-  ['{FD18CD03-F648-4C7C-923A-A88CA86B1CC3}']
+  ['{E80C43DD-C663-4044-A883-455C8DC988A1}']
   end;
 
   IInterestedMessage = interface(IFixedMessage)
-  ['{5CC649FA-4187-4107-9A03-D5816EA0ED43}']
+  ['{0A380AF8-7986-4EB3-AA55-CA77C2657F00}']
   end;
 
   INotInterestedMessage = interface(IFixedMessage)
-  ['{AD849517-D706-49E2-8858-B8A6CB4533C2}']
+  ['{620365DA-DE5A-4C6C-AEA4-131521CAAD9C}']
   end;
 
   IHaveMessage = interface(IFixedMessage)
-  ['{A46C1A07-520E-445E-A2D2-236D459995DD}']
+  ['{D5FBDAB6-BABF-4D12-A2AF-A341D2F48DB7}']
     function GetPieceIndex: Integer;
 
     property PieceIndex: Integer read GetPieceIndex;
   end;
 
   IBitfieldMessage = interface(IFixedMessage)
-  ['{07F4AD47-E0B6-42B3-B1C6-EFC38987716F}']
-    function GetBits: TBitField;
+  ['{4BD183FB-7A32-4688-A403-03482EF221A3}']
+    function GetBitField: TBitField;
 
-    property Bits: TBitField read GetBits;
+    property BitField: TBitField read GetBitField;
   end;
 
   IRequestMessage = interface(IFixedMessage)
-  ['{A9F5C862-1829-497A-B605-84AA54055F69}']
+  ['{37267B1A-0DF8-425A-9B1C-2E3DABA18B38}']
     function GetPieceIndex: Integer;
     function GetOffset: Integer;
     function GetSize: Integer;
@@ -98,7 +118,7 @@ type
   end;
 
   IPieceMessage = interface(IFixedMessage)
-  ['{04770891-7321-4282-84F1-BED1885E9B52}']
+  ['{9ED990F7-A704-46ED-9492-43E16566AC99}']
     function GetPieceIndex: Integer;
     function GetOffset: Integer;
     function GetBlock: TUniString;
@@ -109,7 +129,7 @@ type
   end;
 
   ICancelMessage = interface(IFixedMessage)
-  ['{421BC755-68A6-43B7-9492-17C599EA5060}']
+  ['{EA4C56F8-0617-4FB8-A795-10A19981A86F}']
     function GetPieceIndex: Integer;
     function GetOffset: Integer;
     function GetSize: Integer;
@@ -120,14 +140,14 @@ type
   end;
 
   IPortMessage = interface(IFixedMessage)
-  ['{E613243D-C193-494E-B533-7D35B5F3751D}']
+  ['{C71C7DC2-CA7A-4D24-B71A-68C477746563}']
     function GetPort: TIdPort;
 
     property Port: TIdPort read GetPort;
   end;
 
   IHandshakeMessage = interface(IMessage)
-  ['{7A4C2C70-3DE7-45CD-A9FB-5FF5A43A347C}']
+  ['{3F782B6B-8C70-48F6-ADB0-0DBBD2014416}']
     function GetInfoHash: TUniString;
     function GetPeerID: TUniString;
     function GetFlags: TUniString;
@@ -144,7 +164,7 @@ type
   end;
 
   IExtension = interface
-  ['{B034EFF5-9A3F-45DB-AD3C-A76D376E6B97}']
+  ['{28B28D8A-C375-490B-9AF2-183682E3916A}']
     function GetData: TUniString;
     function GetSize: Integer;
     function GetSupportName: string;
@@ -155,22 +175,40 @@ type
   end;
 
   IExtensionHandshake = interface(IExtension)
-  ['{1991B2A0-2055-4C90-8DDE-0AB2A8178209}']
+  ['{B8188CDB-CFDB-43EB-B8B5-04B245978EBE}']
     function GetClientVersion: string;
     function GetPort: TIdPort;
     function GetMetadataSize: Integer;
-    function GetSupports: IDictionary<string, Byte>;
+    function GetSupports: TDictionary<string, Byte>;
 
     property ClientVersion: string read GetClientVersion;
     property Port: TIdPort read GetPort;
     property MetadataSize: Integer read GetMetadataSize;
-    property Supports: IDictionary<{Name}string, {MsgID}Byte> read GetSupports;
+    property Supports: TDictionary<string, Byte> read GetSupports;
   end;
 
-  TMetadataMessageType = (mmtRequest = 0, mmtData = 1, mmtReject = 2);
+  TMetadataMessageType = (
+    mmtRequest,
+    mmtData,
+    mmtReject
+  );
+
+  TMetadataMessageTypeHelper = record helper for TMetadataMessageType
+  private
+    const
+      MetadataMessageTypeByte: array[TMetadataMessageType] of Byte = (
+        {mmtRequest}  0,
+        {mmtData}     1,
+        {mmtReject}   2
+      );
+  private
+    function GetAsByte: Byte; inline;
+  public
+    property AsByte: Byte read GetAsByte;
+  end;
 
   IExtensionMetadata = interface(IExtension)
-  ['{CBF226B0-2555-499E-9C41-738448E4AE58}']
+  ['{B9DBBB68-96CC-4D1A-AA1F-3B8E056278D8}']
     function GetMessageType: TMetadataMessageType;
     function GetPiece: Integer;
     function GetMetadata: TUniString;
@@ -180,24 +218,14 @@ type
     property Metadata: TUniString read GetMetadata;
   end;
 
-  TCommentMessageType = (cmtRequest = 0, cmtResponse = 1);
-
-  IExtensionComment = interface(IExtension)
-  ['{25DF5692-E76B-48E3-882A-9932B02B3DD8}']
-    function GetMessageType: TCommentMessageType;
-
-    property MessageType: TCommentMessageType read GetMessageType;
-  end;
-
   IExtensionMessage = interface(IMessage)
-  ['{4B8D86F8-33E3-479B-8C5D-BD89715B5861}']
+  ['{AA21A80E-6D53-411D-BB0D-B7E41DB2238C}']
     function GetExtension: IExtension;
     function GetMessageID: Byte;
 
     property MessageID: Byte read GetMessageID;
     property Extension: IExtension read GetExtension;
   end;
-  {$ENDREGION}
 
   TConnectionType = (ctUnknown, ctOutgoing, ctIncoming);
 
@@ -208,7 +236,7 @@ type
     function GetIPVer: TIdIPVersion;
     function GetConnected: Boolean;
     function GetConnectionType: TConnectionType;
-    function GetBytesSend: UInt64;
+    function GetBytesSent: UInt64;
     function GetBytesReceived: UInt64;
     function GetOnDisconnect: TProc;
     procedure SetOnDisconnect(Value: TProc);
@@ -225,23 +253,53 @@ type
     property Connected: Boolean read GetConnected;
     property ConnectionType: TConnectionType read GetConnectionType;
 
-    property BytesSend: UInt64 read GetBytesSend;
+    property BytesSent: UInt64 read GetBytesSent;
     property BytesReceived: UInt64 read GetBytesReceived;
 
     property OnDisconnect: TProc read GetOnDisconnect write SetOnDisconnect;
   end;
 
+  IServer = interface
+  ['{4C250AE1-61F3-47E7-8A86-3F6A876EEB33}']
+    function GetListenPort: TIdPort;
+    procedure SetListenPort(const Value: TIdPort);
+    function GetActive: Boolean;
+    procedure SetActive(const Value: Boolean);
+    function GetOnConnect: TProc<IConnection>;
+    procedure SetOnConnect(const Value: TProc<IConnection>);
+    function GetBindings: TIdSocketHandles;
+    procedure SetBindings(const Value: TIdSocketHandles);
+    function GetUseNagle: Boolean;
+    procedure SetUseNagle(const Value: Boolean);
+
+    property ListenPort: TIdPort read GetListenPort write SetListenPort;
+    property Active: Boolean read GetActive write SetActive;
+    property OnConnect: TProc<IConnection> read GetOnConnect write SetOnConnect;
+    property Bindings: TIdSocketHandles read GetBindings write SetBindings;
+    property UseNagle: Boolean read GetUseNagle write SetUseNagle;
+  end;
+
   TPeerFlag = (pfWeChoke, pfWeInterested, pfTheyChoke, pfTheyInterested);
   TPeerFlags = set of TPeerFlag;
+
+  IPeer = interface;
+
+  TPieceProc = reference to procedure (APeer: IPeer; APieceIndex, AOffset: Integer;
+    AHash, ABlock: TUniString);
 
   IPeer = interface(IBusy)
   ['{C19B9DFA-B91E-4302-8FE2-BB8F6B18E62B}']
     {$REGION 'selectors/modificators'}
+    function GetInfoHash: TUniString;
+    function GetClientID: TUniString;
     function GetBitfield: TBitField;
-    function GetConnected: Boolean;
+    function GetConnectionEstablished: Boolean;
+    function GetConnectionConnected: Boolean;
     function GetFlags: TPeerFlags;
     function GetOnConnect: TProc<IPeer, IMessage>;
     procedure SetOnConnect(Value: TProc<IPeer, IMessage>);
+    function GetOnDisonnect: TProc<IPeer>;
+    procedure SetOnDisconnect(Value: TProc<IPeer>);
     function GetOnChoke: TProc<IPeer>;
     procedure SetOnChoke(Value: TProc<IPeer>);
     function GetOnUnchoke: TProc<IPeer>;
@@ -250,25 +308,29 @@ type
     procedure SetOnInterest(Value: TProc<IPeer>);
     function GetOnNotInerest: TProc<IPeer>;
     procedure SetOnNotInerest(Value: TProc<IPeer>);
-    function GetOnBitField: TProc<TBitField>;
-    procedure SetOnBitField(Value: TProc<TBitField>);
-    function GetOnHave: TProc<Integer>;
-    procedure SetOnHave(Value: TProc<Integer>);
+    function GetOnStart: TProc<IPeer, TUniString, TBitField>;
+    procedure SetOnStart(Value: TProc<IPeer, TUniString, TBitField>);
+    function GetOnHave: TProc<IPeer, Integer>;
+    procedure SetOnHave(Value: TProc<IPeer, Integer>);
     function GetOnRequest: TProc<IPeer, Integer, Integer, Integer>;
     procedure SetOnRequest(Value: TProc<IPeer, Integer, Integer, Integer>);
-    function GetOnCancel: TProc<IPeer, Integer, Integer, Integer>;
-    procedure SetOnCancel(Value: TProc<IPeer, Integer, Integer, Integer>);
-    function GetOnPiece: TProc<IPeer, Integer, Integer, TUniString>;
-    procedure SetOnPiece(Value: TProc<IPeer, Integer, Integer, TUniString>);
+    function GetOnCancel: TProc<IPeer, Integer, Integer>;
+    procedure SetOnCancel(Value: TProc<IPeer, Integer, Integer>);
+    function GetOnPiece: TPieceProc;
+    procedure SetOnPiece(Value: TPieceProc);
     function GetOnException: TProc<IPeer, Exception>;
     procedure SetOnException(Value: TProc<IPeer, Exception>);
+    function GetOnUpdateCounter: TProc<IPeer, UInt64, UInt64>;
+    procedure SetOnUpdateCounter(Value: TProc<IPeer, UInt64, UInt64>);
+
     function GetHost: string;
     function GetPort: TIdPort;
     function GetIPVer: TIdIPVersion;
-    function GetExteinsionSupports: IDictionary<{Name}string, {MsgID}Byte>;
+    function GetConnectionType: TConnectionType;
+    function GetBytesSent: UInt64;
+    function GetBytesReceived: UInt64;
+    function GetRate: Single;
     function GetHashCode: Integer;
-    function GetOnExtendedMessage: TProc<IPeer, IExtension>;
-    procedure SetOnExtendedMessage(Value: TProc<IPeer, IExtension>);
     {$ENDREGION}
 
     procedure Interested;
@@ -276,40 +338,97 @@ type
     procedure Choke;
     procedure Unchoke;
     procedure Request(AIndex, AOffset, ALength: Integer);
+    procedure Cancel(AIndex, AOffset: Integer);
     procedure SendHave(AIndex: Integer);
-    procedure SendBitfield(const ABitfield: TBitField); { как-то бы назвать их грамотно }
+    procedure SendBitfield(const ABitfield: TBitField);
     procedure SendPiece(APieceIndex, AOffset: Integer; const ABlock: TUniString);
-    procedure SendPort(APort: TIdPort);
-    procedure SendExtensionMessage(AExtension: IExtension);
 
+    procedure Disconnect;
+
+    property InfoHash: TUniString read GetInfoHash;
+    property ClientID: TUniString read GetClientID;
     property Bitfield: TBitField read GetBitfield;
-    property Connected: Boolean read GetConnected; { значит, что связь установлена и подтверждена }
+    property ConnectionEstablished: Boolean read GetConnectionEstablished; { значит, что связь установлена и подтверждена }
+    property ConnectionConnected: Boolean read GetConnectionConnected;
     property Flags: TPeerFlags read GetFlags;
 
     property Host: string read GetHost;
     property Port: TIdPort read GetPort;
     property IPVer: TIdIPVersion read GetIPVer;
-    property ExteinsionSupports: IDictionary<{Name}string, {MsgID}Byte> read GetExteinsionSupports;
+    property ConnectionType: TConnectionType read GetConnectionType;
+
+    property BytesSent: UInt64 read GetBytesSent;
+    property BytesReceived: UInt64 read GetBytesReceived;
+    property Rate: Single read GetRate;
 
     property HashCode: Integer read GetHashCode;
 
     /// Events
     property OnConnect: TProc<IPeer, IMessage> read GetOnConnect write SetOnConnect;
+    property OnDisonnect: TProc<IPeer> read GetOnDisonnect write SetOnDisconnect;
     property OnChoke: TProc<IPeer> read GetOnChoke write SetOnChoke;
     property OnUnchoke: TProc<IPeer> read GetOnUnchoke write SetOnUnchoke;
     property OnInterest: TProc<IPeer> read GetOnInterest write SetOnInterest;
     property OnNotInerest: TProc<IPeer> read GetOnNotInerest write SetOnNotInerest;
 
-    property OnBitField: TProc<TBitField> read GetOnBitField write SetOnBitField;
-    property OnHave: TProc<Integer { index }> read GetOnHave write SetOnHave;
+    property OnStart: TProc<IPeer, TUniString, TBitField> read GetOnStart write SetOnStart;
+    property OnHave: TProc<IPeer, Integer { index }> read GetOnHave write SetOnHave;
     // с нас запрашивают блок index    offset   size     data
     property OnRequest: TProc<IPeer, Integer, Integer, Integer>
       read GetOnRequest write SetOnRequest;
-    property OnCancel: TProc<IPeer, Integer, Integer, Integer>
+    property OnCancel: TProc<IPeer, Integer, Integer>
       read GetOnCancel write SetOnCancel;
-    property OnPiece: TProc<IPeer, Integer, Integer, TUniString> read GetOnPiece write SetOnPiece;
-    property OnExtendedMessage: TProc<IPeer, IExtension> read GetOnExtendedMessage write SetOnExtendedMessage;
+    property OnPiece: TPieceProc read GetOnPiece write SetOnPiece;
     property OnException: TProc<IPeer, Exception> read GetOnException write SetOnException;
+    property OnUpdateCounter: TProc<IPeer, UInt64, UInt64> read GetOnUpdateCounter write SetOnUpdateCounter;
+  end;
+
+  ITracker = interface(IBusy)
+  ['{94C212F0-D558-404C-8A8A-9A7BA62121B0}']
+    function GetInfoHash: TUniString;
+    function GetAnnouncePort: TIdPort;
+    function GetAnnounceInterval: Integer;
+    function GetRetrackInterval: Integer;
+    function GetOnResponsePeerInfo: TProc<string, TIdPort>;
+    procedure SetOnResponsePeerInfo(const Value: TProc<string, TIdPort>);
+
+    property InfoHash: TUniString read GetInfoHash;
+    property AnnouncePort: TIdPort read GetAnnouncePort;
+    property AnnounceInterval: Integer read GetAnnounceInterval;
+    property RetrackInterval: Integer read GetRetrackInterval;
+    property OnResponsePeerInfo: TProc<string, TIdPort> read GetOnResponsePeerInfo write SetOnResponsePeerInfo;
+  end;
+
+  IStatTracker = interface(ITracker)
+  ['{2207713C-A73B-4815-A036-847F7183F44C}']
+    function GetBytesUploaded: Int64;
+    procedure SetBytesUploaded(const Value: Int64);
+    function GetBytesDownloaded: Int64;
+    procedure SetBytesDownloaded(const Value: Int64);
+    function GetBytesLeft: Int64;
+    procedure SetBytesLeft(const Value: Int64);
+    function GetBytesCorrupt: Int64;
+    procedure SetBytesCorrupt(const Value: Int64);
+
+    property BytesUploaded: Int64 read GetBytesUploaded write SetBytesUploaded;
+    property BytesDownloaded: Int64 read GetBytesDownloaded write SetBytesDownloaded;
+    property BytesLeft: Int64 read GetBytesLeft write SetBytesLeft;
+    property BytesCorrupt: Int64 read GetBytesCorrupt write SetBytesCorrupt;
+  end;
+
+  IWebTracker = interface(IStatTracker)
+  ['{4E288897-308A-4ED0-A210-49B958A5E969}']
+    function GetTrackerURL: string;
+
+    property TrackerURL: string read GetTrackerURL;
+  end;
+
+  IDHTTracker = interface(ITracker)
+  ['{E9883783-6856-4F22-9A4F-996AACCADB77}']
+  end;
+
+  IHTTPTracker = interface(IWebTracker)
+  ['{9ED2EB24-5902-4BF5-BAC5-1B2D464CD1C2}']
   end;
 
   IFileItem = interface
@@ -317,53 +436,47 @@ type
     function GetFilePath: string;
     function GetFileSize: UInt64;
     function GetFileOffset: UInt64;
+    function GetFirstPiece: Integer;
+    function GetLastPiece: Integer;
+    function GetPiecesCount: Integer;
+    function GetHashCode: Integer;
 
     property FilePath: string read GetFilePath; { путь }
     property FileSize: UInt64 read GetFileSize; { размер }
     property FileOffset: UInt64 read GetFileOffset; { абсолютное смещение в общем потоке }
-  end;
-
-  IMagnetURI = interface
-  ['{C90069A3-FA2D-41DE-897A-09868B542325}']
-    function GetInfoHash: TUniString;
-    function GetDisplayName: string;
-    function GetTrackers: TList<string>;
-    function GetWebSeeds: TList<string>;
-
-    property InfoHash: TUniString read GetInfoHash;
-    property DisplayName: string read GetDisplayName;
-    property Trackers: TList<string> read GetTrackers;
-    property WebSeeds: TList<string> read GetWebSeeds;
+    property FirstPiece: Integer read GetFirstPiece;
+    property LastPiece: Integer read GetLastPiece;
+    property PiecesCount: Integer read GetPiecesCount;
+    property HashCode: Integer read GetHashCode;
   end;
 
   IMetaFile = interface
   ['{E5ACCB77-FCEC-4DAF-8216-4CF23E63E30B}']
     function GetTotalSize: UInt64;
-    function GetPieceHash(Index: Integer): TUniString;
+    function GetPieceHash(APieceIndex: Integer): TUniString;
     function GetPieceLength(APieceIndex: Integer): Integer;
     function GetPieceOffset(APieceIndex: Integer): Int64;
     function GetPiecesCount: Integer;
     function GetPiecesLength: Integer;
-    function GetFilesByPiece(Index: Integer): IList<IFileItem>;
-    function GetFiles: IList<IFileItem>;
+    function GetFilesByPiece(APieceIndex: Integer): TArray<IFileItem>;
+    function GetFiles: TEnumerable<IFileItem>;
+    function GetFilesCount: Integer;
     function GetInfoHash: TUniString;
-    function GetMetadataSize: Integer;
     function GetMetadata: TUniString;
-
-    procedure LoadFromStream(AStream: TStream);
-    procedure SaveToStream(AStream: TStream);
+    function GetTrackers: TEnumerable<string>;
 
     property TotalSize: UInt64 read GetTotalSize;
     property PiecesCount: Integer read GetPiecesCount;
     property PiecesLength: Integer read GetPiecesLength;
-    property PieceHash[Index: Integer]: TUniString read GetPieceHash;
+    property PieceHash[APieceIndex: Integer]: TUniString read GetPieceHash;
     property PieceLength[APieceIndex: Integer]: Integer read GetPieceLength;
     property PieceOffset[APieceIndex: Integer]: Int64 read GetPieceOffset;
-    property FilesByPiece[Index: Integer]: IList<IFileItem> read GetFilesByPiece;
-    property Files: IList<IFileItem> read GetFiles;
+    property FilesByPiece[APieceIndex: Integer]: TArray<IFileItem> read GetFilesByPiece;
+    property Files: TEnumerable<IFileItem> read GetFiles;
+    property FilesCount: Integer read GetFilesCount;
     property InfoHash: TUniString read GetInfoHash;
-    property MetadataSize: Integer read GetMetadataSize;
     property Metadata: TUniString read GetMetadata;
+    property Trackers: TEnumerable<string> read GetTrackers;
   end;
 
   IPiece = interface
@@ -372,14 +485,19 @@ type
     function GetData: TUniString;
     function GetPieceLength: Integer;
     function GetIndex: Integer;
+    function GetHashTree: TUniString;
+    procedure SetHashTree(const Value: TUniString);
 
     procedure AddBlock(AOffset: Integer; const AData: TUniString);
     //function GetBlock(AOffset, ALength: Integer): TUniString;
+
+    procedure EnumBlocks(ACallBack: TProc<Integer, Integer>);
 
     property Completed: Boolean read GetCompleted;
     property Data: TUniString read GetData;
     property PieceLength: Integer read GetPieceLength;
     property Index: Integer read GetIndex;
+    property HashTree: TUniString read GetHashTree write SetHashTree;
   end;
 
   IFileSystem = interface
@@ -390,7 +508,7 @@ type
     function GetOnChange: TProc<IFileSystem>;
     procedure SetOnChange(Value: TProc<IFileSystem>);
 
-    procedure ClearCaches; { периодическая очистка файлового пула }
+    procedure ClearCaches(AFullClear: Boolean = False); { периодическая очистка файлового пула }
     function PieceCheck(APiece: IPiece): Boolean;
     procedure PieceWrite(APiece: IPiece);
     function CheckFiles: TBitField; { попытаться открыть файлы, прочитать куски и заполнить битфилд }
@@ -403,231 +521,445 @@ type
     property OnChange: TProc<IFileSystem> read GetOnChange write SetOnChange;
   end;
 
-  IPiecePicker = interface
-  ['{6D8A652E-852F-4F50-BDF7-4AC80E8812A1}']
-    procedure PickPiece(APeer: IPeer; AAllPeers: TList<IPeer>;
-      AWant: TBitField; ACallBack: TProc<Integer>);
+  TSeedingState = (
+    ssHaveMetadata,   // наличие метаданных (т.к. их не можен не быть -- всегда активно)
+    ssActive,         // раздача захватывается циклом
+    ssChecking,       // проверка хешей раздачи
+    ssDownloading,    // происходит загрузка
+    ssPaused,         // загрузка активна, но приостановлена
+    ssCompleted,      // все файлы полностью загружены
+    ssCorrupted,      // раздача повреждена (не совпал хеш при чтении); используется в паре с ssError
+    ssError           // загрузка прервана по причине ошибки (например не получилось открыть файл)
+  );
+  TSeedingStates = set of TSeedingState;
+
+  TSeedingStatesHelper = record helper for TSeedingStates
+  private
+    function GetAsInteger: Integer;
+    procedure SetAsInteger(const Value: Integer);
+  public
+    property AsInteger: Integer read GetAsInteger write SetAsInteger;
+    class function Parse(const Value: Integer): TSeedingStates; inline; static;
   end;
 
-  TSeedingState = (ssUnknown, ssHaveMetadata, ssActive, ssChecking, ssRetracking,
-    ssDownloading, ssPaused, ssSeeding, ssCompleted, ssError, ssCorrupted);
-  TSeedingStates = set of TSeedingState;
+  ICounter = interface
+  ['{A1DD7ABD-D8B1-42A9-8A3E-8E0BEA087DFA}']
+    function GetTotalDownloaded: UInt64;
+    function GetTotalUploaded: UInt64;
+    function GetDownloadSpeed: Single;
+    function GetUploadSpeed: Single;
+
+    property TotalDownloaded: UInt64 read GetTotalDownloaded;
+    property TotalUploaded: UInt64 read GetTotalUploaded;
+    property DownloadSpeed: Single read GetDownloadSpeed; { Кбайт в секунду }
+    property UploadSpeed: Single read GetUploadSpeed;
+  end;
+
+  IMutableCounter = interface
+  ['{F1C91B52-79FF-43E0-9101-2EB86254722F}']
+    procedure Update(const ADownloaded, AUploaded: UInt64);
+    procedure Add(const ADownloaded, AUploaded: UInt64);
+    procedure ResetSpeed;
+  end;
+
+  TFilePriority = (fpSkip, fpLowest, fpLow, fpNormal, fpHigh, fpHighest,
+    fpImmediate);
+
+  ISeedingItem = interface
+  ['{2828BC03-1FB2-4731-B8FA-696FA6EE11FE}']
+    function GetPriority: TFilePriority;
+    procedure SetPriority(const Value: TFilePriority);
+    function GetPath: string;
+    function GetSize: Int64;
+    function GetFirstPiece: Integer;
+    function GetLastPiece: Integer;
+    function GetPiecesCount: Integer;
+    function GetPercentComplete: Double;
+
+    function IsLoaded(AOffset, ALength: Int64): Boolean;
+    function Require(AOffset, ALength: Int64): Boolean;
+
+    property Priority: TFilePriority read GetPriority write SetPriority;
+    property Path: string read GetPath;
+    property Size: Int64 read GetSize;
+    property FirstPiece: Integer read GetFirstPiece;
+    property LastPiece: Integer read GetLastPiece;
+    property PiecesCount: Integer read GetPiecesCount;
+    property PercentComplete: Double read GetPercentComplete;
+  end;
+
+  IPiecePicker = interface
+  ['{B3CB60AD-00AC-4479-AE3A-5A6C7C76FC70}']
+    function GetNextPicker: IPiecePicker;
+    function GetFetchSize: Integer;
+
+    property NextPicker: IPiecePicker read GetNextPicker;
+    property FetchSize: Integer read GetFetchSize;
+    function Fetch(APeerHave: TBitField; APeersHave: TBitSum;
+      AWant: TBitField): TArray<Integer>;
+  end;
+
+  IRequestFirstPicker = interface(IPiecePicker)
+  ['{01A53CC5-652B-49A2-A680-63B180319B64}']
+    function Push(AIndex: Integer): Boolean;
+  end;
 
   ISeeding = interface(IBusy) { раздача, она же и закачка }
   ['{A428EA0C-EF82-4A67-9F74-DF22EC858D20}']
     function GetLastRequest: TDateTime;
-    function GetPeers: TList<IPeer>;
+    function GetPeers: TEnumerable<IPeer>;
+    function GetPeersCount: Integer;
+    function GetTrackers: TEnumerable<ITracker>;
+    function GetTrackersCount: Integer;
     function GetInfoHash: TUniString;
     function GetBitfield: TBitField;
+    function GetPeersHave: TBitSum;
+    function GetItems: TEnumerable<ISeedingItem>;
+    function GetItemsCount: Integer;
     function GetMetafile: IMetaFile;
     function GetFileSystem: IFileSystem;
     function GetState: TSeedingStates;
+    function GetOverageCount: UInt64;
     function GetHashErrorCount: Integer;
     function GetPercentComplete: Double;
+    function GetCompeteSize: UInt64;
+    function GetTotalSize: UInt64;
+    function GetCounter: ICounter;
     function GetDownloadPath: string;
-    function GetOnMetadataLoaded: TProc<TUniString>;
-    procedure SetOnMetadataLoaded(Value: TProc<TUniString>);
+    function GetOnUpdate: TProc<ISeeding>;
+    procedure SetOnUpdate(Value: TProc<ISeeding>);
+    function GetOnDelete: TProc<ISeeding>;
+    procedure SetOnDelete(Value: TProc<ISeeding>);
+    function GetOnUpdateCounter: TProc<ISeeding, UInt64, UInt64>;
+    procedure SetOnUpdateCounter(Value: TProc<ISeeding, UInt64, UInt64>);
 
-    procedure AddPeer(const AHost: string; APort: TIdPort; APeerID: string;
+    procedure AddPeer(const AHost: string; APort: TIdPort;
       AIPVer: TIdIPVersion = Id_IPv4); overload;
-    procedure AddPeer(APeer: IPeer; AHSMessage: IHandshakeMessage); overload;
+    procedure AddPeer(APeer: IPeer); overload;
+    procedure AddTracker(ATracker: ITracker);
+    procedure RemovePeer(APeer: IPeer);
+
     procedure Touch;
+    procedure Start;
+    procedure Pause;
+    procedure Stop;
     procedure Delete(ADeleteFiles: Boolean = False);
 
+    { запросить загрузку в перую очередь }
+    function Require(AItem: ISeedingItem; AOffset, ALength: Int64): Boolean;
+
     property LastRequest: TDateTime read GetLastRequest;
-    property Peers: TList<IPeer> read GetPeers; // может скрыть?
+    property Peers: TEnumerable<IPeer> read GetPeers;
+    property PeersCount: Integer read GetPeersCount;
+    property Trackers: TEnumerable<ITracker> read GetTrackers;
+    property TrackersCount: Integer read GetTrackersCount;
     property InfoHash: TUniString read GetInfoHash;
-    property Bitfield: TBitField read GetBitfield;
+    property Bitfield: TBitField read GetBitfield; // загружено
+    property PeersHave: TBitSum read GetPeersHave; // всего доступно
+    property Items: TEnumerable<ISeedingItem> read GetItems;
+    property ItemsCount: Integer read GetItemsCount;
     property Metafile: IMetaFile read GetMetafile;
     property FileSystem: IFileSystem read GetFileSystem;
     property State: TSeedingStates read GetState;
+    property OverageCount: UInt64 read GetOverageCount;
     property HashErrorCount: Integer read GetHashErrorCount;
     property PercentComplete: Double read GetPercentComplete;
+    property CompeteSize: UInt64 read GetCompeteSize;
+    property TotalSize: UInt64 read GetTotalSize;
     property DownloadPath: string read GetDownloadPath;
-    property OnMetadataLoaded: TProc<TUniString> read GetOnMetadataLoaded write SetOnMetadataLoaded;
+    property Counter: ICounter read GetCounter;
+
+    property OnUpdate: TProc<ISeeding> read GetOnUpdate write SetOnUpdate;
+    property OnDelete: TProc<ISeeding> read GetOnDelete write SetOnDelete;
+    property OnUpdateCounter: TProc<ISeeding, UInt64, UInt64> read GetOnUpdateCounter write SetOnUpdateCounter;
   end;
 
-  TBittorrent = class
+  IShareman = interface
+  ['{5F4DF5D0-6B21-4C16-8EB9-7B250AEA65CC}']
+    function GetSeedings: TDictionary<TUniString, ISeeding>;
+    function GetBlackListTime: Integer;
+    procedure SetBlackListTime(const Value: Integer);
+    function GetCounter: ICounter;
+    function GetOnActivateSeeding: TProc<IPeer, TUniString>;
+    procedure SetOnActivateSeeding(const Value: TProc<IPeer, TUniString>);
+
+    procedure Start; { запуск основного цикла }
+    procedure Stop;
+
+    procedure AddPeer(const AInfoHash: TUniString; const AHost: string;
+      APort: TIdPort; AIPVer: TIdIPVersion = Id_IPv4);
+
+    function AddMagnet(const AMagnet: string;
+      const ADownloadPath: string): ISeeding;
+    function AddTorrent(const ATorrentData: TUniString;
+      const ADownloadPath: string): ISeeding; overload;
+    function AddTorrent(const ATorrentData, ABitField: TUniString;
+      const ADownloadPath: string; AStates: TSeedingStates): ISeeding; overload;
+
+    function ContainsUnit(const AInfoHash: TUniString): Boolean;
+
+    function StartUnit(const AInfoHash: TUniString): Boolean;
+    function PauseUnit(const AInfoHash: TUniString): Boolean;
+    function StopUnit(const AInfoHash: TUniString): Boolean;
+    function DeleteUnit(const AInfoHash: TUniString; ADeleteFiles: Boolean = False): Boolean;
+
+    property Seedings: TDictionary<TUniString, ISeeding> read GetSeedings;
+    property BlackListTime: Integer read GetBlackListTime write SetBlackListTime;
+
+    property Counter: ICounter read GetCounter;
+
+    property OnActivateSeeding: TProc<IPeer, TUniString> read GetOnActivateSeeding write SetOnActivateSeeding;
+  end;
+
+  TShareman = class(TInterfacedObject, IShareman)
+  public
+    const
+      SharBlockCount  = 8;
+      SharBlockLength = $4000;
+      SharPieceLength = SharBlockLength * SharBlockCount; { 128 Kb = 8 * 16 Kb}
   private
     FThreads: TThreadPool;
-    FClientVersion: string;
-    FPeerID: string;
+    FClientID: TUniString;
     FSeedings: TDictionary<TUniString, ISeeding>;
     FTerminated: Boolean;
     FLock: TObject;
-    FListener: TTCPServer;
+    FListener: IServer;
+    FListenPort: TIdPort;
     FBlackListTime: Integer;
     FBlackListCounter: Integer;
     FBlackList: TDictionary<string, TDateTime>;
-    FOnConnectIncoming: TProc<IPeer, TUniString>;
+    FOnActivateSeeding: TProc<IPeer, TUniString>;
+    FCounter: ICounter;
 
-    procedure SetPeerID(const Value: string);
-    procedure SetBlackListTime(const Value: Integer);
-    procedure OnPeerConnect(AContext: TIdContext);
+    function GetBlackListTime: Integer; inline;
+    procedure SetBlackListTime(const Value: Integer); inline;
+    function GetSeedings: TDictionary<TUniString, ISeeding>; inline;
+    function GetCounter: ICounter; inline;
+    function GetOnActivateSeeding: TProc<IPeer, TUniString>; inline;
+    procedure SetOnActivateSeeding(const Value: TProc<IPeer, TUniString>); inline;
+
+    procedure OnPeerConnect(AConnection: IConnection);
     function Blacklisted(AHost: string): Boolean; inline;
     procedure AddToBlackList(AHost: string); inline;
+    procedure OnSeedingUpdateCounter(ASeeding: ISeeding; ADown, AUpl: UInt64);
+    procedure OnSeedingDelete(ASeeding: ISeeding);
 
-    procedure AddSeeding(ASeeding: ISeeding); inline;
     procedure Lock; inline;
     procedure Unlock; inline;
-  public
-    procedure Start; { запуск основного цикла }
+
+    function SyncSeedings: Boolean;
+
+    procedure Start;
     procedure Stop; inline;
 
     procedure AddPeer(const AInfoHash: TUniString; const AHost: string;
       APort: TIdPort; AIPVer: TIdIPVersion = Id_IPv4);
 
-    { добавить торрент-файл }
-    function AddTorrent(const AFileName, ADownloadPath: string): TUniString;
-    { добавить торрент по magnet-ссылке }
-    function AddMagnetURI(const AMagnetURI, ADownloadPath: string): TUniString;
+    function AddMagnet(const AMagnet: string;
+      const ADownloadPath: string): ISeeding; inline;
+    function AddTorrent(const ATorrentData: TUniString;
+      const ADownloadPath: string): ISeeding; overload; inline;
+    function AddTorrent(const ATorrentData, ABitField: TUniString;
+      const ADownloadPath: string; AStates: TSeedingStates): ISeeding; overload; inline;
 
-    function DeleteTorrent(const AInfoHash: TUniString): Boolean;
+    function AddSeeding(AMetaFile: IMetaFile; const ABitField: TUniString;
+      const ADownloadPath: string; AStates: TSeedingStates): ISeeding;
 
-    class constructor ClassCreate;
+    function ContainsUnit(const AInfoHash: TUniString): Boolean; inline;
 
-    property Seedings: TDictionary<TUniString, ISeeding> read FSeedings;
-    property ClientVersion: string read FClientVersion write FClientVersion;
-    property PeerID: string read FPeerID write SetPeerID;
-    property BlackListTime: Integer read FBlackListTime write SetBlackListTime;
-
-    property OnConnectIncoming: TProc<IPeer, TUniString> read FOnConnectIncoming write FOnConnectIncoming;
-    constructor Create(AListenPort: TIdPort); { передавать параметры для запуска слушалки }
+    function StartUnit(const AInfoHash: TUniString): Boolean;
+    function PauseUnit(const AInfoHash: TUniString): Boolean;
+    function StopUnit(const AInfoHash: TUniString): Boolean;
+    function DeleteUnit(const AInfoHash: TUniString; ADeleteFiles: Boolean = False): Boolean;
+  public
+    constructor Create(const AClientID: TUniString; AListenPort: TIdPort);
     destructor Destroy; override;
   end;
 
-  EBittorrentException      = class(Exception);
+  EBittorrentException = class(Exception);
 
-  EServerException          = class(EBittorrentException);
-  EServerInvalidPeer        = class(EServerException);
+  EPeerException = class(EBittorrentException);
+  EPeerConnectionTimeout = class(EPeerException);
+  EPeerInvalidPeer = class(EPeerException);
+  EUnknownMessage = class(EPeerException);
 
-  EFileSystemException      = class(EBittorrentException);
-  EFileSystemReadException  = class(EFileSystemException);
+  ESeedingException = class(EBittorrentException);
+  EPeerAlreadyConnected = class(ESeedingException);
+
+  EMetafileException = class(EBittorrentException);
+
+  EServerException = class(EBittorrentException);
+  EPeerSelfConnect = class(EServerException);
+  EInvalidPeer = class(EServerException);
+
+  EProtocolWrongPiece = class(EBittorrentException);
+
+  EFileSystemException = class(EBittorrentException);
+  EFileSystemReadException = class(EFileSystemException);
   EFileSystemWriteException = class(EFileSystemException);
   EFileSystemCheckException = class(EFileSystemException);
 
 implementation
 
 uses
-  Bittorrent.Seeding, Bittorrent.MagnetURI, Bittorrent.MetaFile,
-  Bittorrent.Messages, Bittorrent.Extensions, Bittorrent.Peer,
-  Bittorrent.Connection;
+  Bittorrent.Server, Bittorrent.Seeding, Bittorrent.MetaFile, Bittorrent.Messages,
+  Bittorrent.Peer, Bittorrent.Connection, Bittorrent.Counter;
 
-{ TBittorrent }
+{ TMessageIDHelper }
 
-function TBittorrent.AddMagnetURI(const AMagnetURI,
-  ADownloadPath: string): TUniString;
-var
-  uri: IMagnetURI;
-  s: ISeeding;
+function TMessageIDHelper.GetAsByte: Byte;
 begin
-  uri := TMagnetURI.Create(AMagnetURI) as IMagnetURI;
-  Result := uri.InfoHash;
-
-  s := TSeeding.Create(ADownloadPath, FThreads, Result, FClientVersion, 0) as ISeeding;
-  s.OnMetadataLoaded := procedure (AData: TUniString)
-  begin
-    // не суть важно как именовать
-    with TFileStream.Create(SHA1(AData).ToHexString + '.torrent', fmCreate) do
-    try
-      Write(AData.DataPtr[0]^, AData.Len);
-    finally
-      Free;
-    end;
-  end;
-
-  AddSeeding(s);
+  Result := MessageIDCode[Self];
 end;
 
-procedure TBittorrent.AddPeer(const AInfoHash: TUniString; const AHost: string;
+class function TMessageIDHelper.Parse(AValue: Byte): TMessageID;
+begin
+  Result.AsByte := AValue;
+end;
+
+procedure TMessageIDHelper.SetAsByte(const Value: Byte);
+var
+  id: TMessageID;
+begin
+  for id := Low(TMessageID) to High(TMessageID) do
+    if MessageIDCode[id] = Value then
+    begin
+      Self := id;
+      Exit;
+    end;
+
+  raise Exception.Create('Invalid value');
+end;
+
+{ TMetadataMessageTypeHelper }
+
+function TMetadataMessageTypeHelper.GetAsByte: Byte;
+begin
+  Result := MetadataMessageTypeByte[Self];
+end;
+
+{ TShareman }
+
+function TShareman.AddSeeding(AMetaFile: IMetaFile; const ABitField: TUniString;
+  const ADownloadPath: string; AStates: TSeedingStates): ISeeding;
+begin
+  Lock;
+  try
+    if FSeedings.ContainsKey(AMetaFile.InfoHash) then
+      Result := FSeedings[AMetaFile.InfoHash]
+    else
+    begin
+      Result := TSeeding.Create(ADownloadPath, FThreads, FClientID,
+        AMetaFile, TBitField.FromUniString(ABitField), AStates, FListenPort);
+
+      FSeedings.Add(AMetaFile.InfoHash, Result);
+    end;
+
+    Result.OnUpdateCounter := OnSeedingUpdateCounter;
+    Result.OnDelete := OnSeedingDelete;
+  finally
+    Unlock;
+  end;
+end;
+
+function TShareman.AddMagnet(const AMagnet, ADownloadPath: string): ISeeding;
+begin
+
+end;
+
+procedure TShareman.AddPeer(const AInfoHash: TUniString; const AHost: string;
   APort: TIdPort; AIPVer: TIdIPVersion);
 begin
+  Assert(APort <> 0);
+
   Lock;
   try
     if FSeedings.ContainsKey(AInfoHash) then
-      FSeedings[AInfoHash].AddPeer(AHost, APort, FPeerID, AIPVer);
+    with FSeedings[AInfoHash] do
+    begin
+      AddPeer(AHost, APort, AIPVer);
+      Touch;
+    end;
   finally
     Unlock;
   end;
 end;
 
-procedure TBittorrent.AddSeeding(ASeeding: ISeeding);
+procedure TShareman.AddToBlackList(AHost: string);
 begin
   Lock;
   try
-    if not FSeedings.ContainsKey(ASeeding.InfoHash) then
-      FSeedings.Add(ASeeding.InfoHash, ASeeding);
+    FBlackList.AddOrSetValue(AHost, Now);
   finally
     Unlock;
   end;
 end;
 
-procedure TBittorrent.AddToBlackList(AHost: string);
+function TShareman.AddTorrent(const ATorrentData: TUniString;
+  const ADownloadPath: string): ISeeding;
+begin
+  Result := AddTorrent(ATorrentData, '', ADownloadPath, []);
+end;
+
+function TShareman.AddTorrent(const ATorrentData, ABitField: TUniString;
+  const ADownloadPath: string; AStates: TSeedingStates): ISeeding;
+begin
+  Result := AddSeeding(TMetaFile.Create(ATorrentData), ABitField, ADownloadPath,
+    AStates);
+end;
+
+function TShareman.Blacklisted(AHost: string): Boolean;
 begin
   Lock;
   try
-    FBlackList.AddOrSetValue(AHost, UtcNow);
+    Result := AHost.IsEmpty or (AHost = '127.0.0.1') or (AHost = '::1') or
+      FBlackList.ContainsKey(AHost);
   finally
     Unlock;
   end;
 end;
 
-function TBittorrent.AddTorrent(const AFileName,
-  ADownloadPath: string): TUniString;
-var
-  mf: IMetaFile;
-begin
-  mf := TMetaFile.Create(AFileName) as IMetaFile;
-  Result := mf.InfoHash;
-
-  AddSeeding(TSeeding.Create(ADownloadPath, FThreads, mf, FClientVersion, 0));
-end;
-
-function TBittorrent.Blacklisted(AHost: string): Boolean;
+function TShareman.ContainsUnit(const AInfoHash: TUniString): Boolean;
 begin
   Lock;
   try
-    Result := FBlackList.ContainsKey(AHost);
+    Result := FSeedings.ContainsKey(AInfoHash);
   finally
     Unlock;
   end;
 end;
 
-class constructor TBittorrent.ClassCreate;
-begin
-  TExtension.AddExtension(TExtensionMetadata);
-  TExtension.AddExtension(TExtensionComment);
-end;
-
-constructor TBittorrent.Create(AListenPort: TIdPort);
+constructor TShareman.Create(const AClientID: TUniString; AListenPort: TIdPort);
 begin
   Randomize;
+
+  FClientID.Assign(AClientID);
+
   FThreads    := TThreadPool.Create;
+
   FSeedings   := System.Generics.Collections.TDictionary<TUniString, ISeeding>.Create(
     TUniStringEqualityComparer.Create as IEqualityComparer<TUniString>
   );
-  FLock       := TObject.Create;
 
-  FClientVersion := DefaultClientVersion;
-  FPeerID     := DefaultPeerID;
+  FLock       := TObject.Create;
 
   FTerminated := False;
 
   FBlackListCounter := 1000;
   FBlackListTime := DefaultBlackListTime;
   FBlackList  := TDictionary<string, TDateTime>.Create;
+
+  FCounter    := TCounter.Create;
   { слушалка }
-  FListener   := TTCPServer.Create(AListenPort);
-  FListener.OnExecute   := OnPeerConnect;
-  FListener.Scheduler   := TIdSchedulerOfThreadPool.Create(FListener);
-  with TIdSchedulerOfThreadPool(FListener.Scheduler) do
-  begin
-    MaxThreads  := 100;
-    PoolSize    := 50;
-  end;
+  FListenPort := AListenPort;
+
+  FListener   := TServer.Create;
+  FListener.ListenPort  := AListenPort;
+  FListener.OnConnect   := OnPeerConnect;
 end;
 
-function TBittorrent.DeleteTorrent(const AInfoHash: TUniString): Boolean;
+function TShareman.DeleteUnit(const AInfoHash: TUniString;
+  ADeleteFiles: Boolean = False): Boolean;
 begin
   Lock;
   try
@@ -636,7 +968,7 @@ begin
     if Result then
     begin
       // удаляем раздачу
-      FSeedings[AInfoHash].Delete;
+      FSeedings[AInfoHash].Delete(ADeleteFiles);
       FSeedings.Remove(AInfoHash);
     end;
   finally
@@ -644,157 +976,343 @@ begin
   end;
 end;
 
-destructor TBittorrent.Destroy;
+destructor TShareman.Destroy;
 begin
   Stop;
-
+  Sleep(1000); // для завершения активных тредов
   FBlackList.Free;
-  FListener.Free;
-  FThreads.Free;
   FSeedings.Free;
   FLock.Free;
+  FThreads.Free;
   inherited;
 end;
 
-procedure TBittorrent.Lock;
+function TShareman.GetBlackListTime: Integer;
+begin
+  Result := FBlackListTime;
+end;
+
+function TShareman.GetCounter: ICounter;
+begin
+  Result := FCounter;
+end;
+
+function TShareman.GetOnActivateSeeding: TProc<IPeer, TUniString>;
+begin
+  Result := FOnActivateSeeding;
+end;
+
+function TShareman.GetSeedings: TDictionary<TUniString, ISeeding>;
+begin
+  Result := FSeedings;
+end;
+
+procedure TShareman.Lock;
 begin
   System.TMonitor.Enter(FLock);
 end;
 
-procedure TBittorrent.OnPeerConnect(AContext: TIdContext);
+procedure TShareman.OnPeerConnect(AConnection: IConnection);
 var
   peer: IPeer;
-  allOK: Boolean;
+  needStart, allOK: Boolean;
 begin
-  { проверяем, всё ли корректно и добавляем, если надо (иначе отключаем) }
-  if Blacklisted(AContext.Binding.PeerIP) then
-  begin
-    AContext.Connection.Disconnect;
-    Exit;
+  TIdStack.IncUsage;
+  try
+    { проверяем, всё ли корректно и добавляем, если надо (иначе отключаем) }
+    with AConnection do
+    if Blacklisted(Host) or (GStack.LocalAddresses.IndexOf(Host) <> -1) then
+    begin
+      Disconnect;
+      Exit;
+    end;
+  finally
+    TIdStack.DecUsage;
   end;
 
   try
+    {$IFDEF PUBL_UTIL}
+    DebugOutput('Peer connecting ' + AConnection.Host);
+    {$ENDIF}
+
     allOK := False;
+    needStart := True;
 
-    peer := TPeer.Create(FThreads,
-        TIncomingConnection.Create(AContext.Connection) as IConnection,
-        FPeerID) as IPeer;
+    peer := TPeer.Create(FThreads, AConnection, FClientID) as IPeer;
 
-    peer.OnConnect := procedure (APeer: IPeer; AMessage: IMessage)
+    peer.OnConnect := procedure (APeer: IPeer; AMsg: IMessage)
+    begin
+      if APeer.ClientID = FClientID then
+      begin
+        needStart := False;
+        raise EPeerSelfConnect.Create('Self connection');
+      end;
+
+      {$IFDEF PUBL_UTIL}
+      DebugOutput('Peer ' + APeer.Host + ' connected OK');
+      {$ENDIF}
+
+      allOK := True;
+    end;
+
+    peer.OnStart := procedure (APeer: IPeer; AInfoHash: TUniString;
+      AHave: TBitField)
     var
       seeding: ISeeding;
     begin
-      with AMessage as IHandshakeMessage do
-      begin
-        // сообщаем о внешнем подключении
-        if Assigned(FOnConnectIncoming) then
-          FOnConnectIncoming(APeer, InfoHash);
+      {$IFDEF PUBL_UTIL}
+      DebugOutput('Seeding_OnStart ' + AInfoHash.ToHexString);
+      {$ENDIF}
+      // сообщаем о внешнем подключении
+      if Assigned(FOnActivateSeeding) then
+        FOnActivateSeeding(APeer, AInfoHash);
 
-        Lock;
+      {$IFDEF PUBL_UTIL}
+      DebugOutput('Seeding_OnStart try lock and add peer');
+      {$ENDIF}
+
+      Lock;
+      try
+        {$IFDEF PUBL_UTIL}
         try
-          allOK := FSeedings.TryGetValue(InfoHash, seeding);
+        {$ENDIF}
+          allOK := FSeedings.TryGetValue(AInfoHash, seeding);
+          Assert(allOK);
 
-          if allOK then
+          seeding.AddPeer(APeer); { добавляем новый пир }
+          seeding.Touch;
+
+        {$IFDEF PUBL_UTIL}
+        except
+          on E: Exception do
           begin
-            seeding.AddPeer(APeer, AMessage as IHandshakeMessage); { добавляем новый пир }
-            seeding.Touch;
+            DebugOutput('Seeding_OnStart error: ' + E.ToString);
+            raise;
           end;
-        finally
-          Unlock;
         end;
+        {$ENDIF}
+      finally
+        needStart := False;
+        Unlock;
       end;
+
+      {$IFDEF PUBL_UTIL}
+      DebugOutput('Seeding_OnStart status = ' + BoolToStr(allOK, True));
+      {$ENDIF}
     end;
 
-    { вызываем Sync, чтобы он законнектился и т.д. }
-    peer.Sync;
-    { ждем коннект }
-    while peer.Busy do
-      Sleep(10);
+    { ждем от него «старт» }
+    while needStart do
+    begin
+      { вызываем Sync, чтобы он законнектился и т.д. }
+      peer.Sync;
+      { ждем коннект }
+      while peer.Busy do
+        Sleep(10);
+    end;
 
     if not allOK then
-      raise EServerInvalidPeer.Create('Invalid peer');
+      raise EInvalidPeer.Create('Invalid peer');
   except
-    AddToBlackList(AContext.Binding.PeerIP);
+    AddToBlackList(AConnection.Host);
   end;
 end;
 
-procedure TBittorrent.SetBlackListTime(const Value: Integer);
+function TShareman.PauseUnit(const AInfoHash: TUniString): Boolean;
+begin
+  Lock;
+  try
+    Result := FSeedings.ContainsKey(AInfoHash);
+
+    if Result then
+      FSeedings[AInfoHash].Pause;
+  finally
+    Unlock;
+  end;
+end;
+
+procedure TShareman.OnSeedingDelete(ASeeding: ISeeding);
+begin
+  Lock;
+  try
+    if FSeedings.ContainsKey(ASeeding.InfoHash) then
+      FSeedings.Remove(ASeeding.InfoHash);
+  finally
+    Unlock;
+  end;
+end;
+
+procedure TShareman.OnSeedingUpdateCounter(ASeeding: ISeeding; ADown, AUpl: UInt64);
+begin
+  (FCounter as IMutableCounter).Add(ADown, AUpl);
+end;
+
+procedure TShareman.SetBlackListTime(const Value: Integer);
 begin
   Assert(Value >= 0);
   FBlackListTime := Value;
 end;
 
-procedure TBittorrent.SetPeerID(const Value: string);
+procedure TShareman.SetOnActivateSeeding(const Value: TProc<IPeer, TUniString>);
 begin
-  // проверки
-  FPeerID := Value;
+  FOnActivateSeeding := Value;
 end;
 
-procedure TBittorrent.Start;
+procedure TShareman.Start;
 begin
-  FListener.Active := FListener.DefaultPort <> 0;
+  FListener.Active := True;
 
   FTerminated := False;
 
-  FThreads.Exec(function : Boolean
-  var
-    key: TUniString;
-    h: string;
-  begin
-    Lock;
-    try
-      { тут надо бы порядок добавления торрентов соблюсти, плюс добавить ограничение }
-      for key in FSeedings.Keys do
-      with FSeedings[key] do
-      begin
-        if ssActive in State then
-          Sync
-        else
-        if MinutesBetween(UtcNow, LastRequest) >= DefaultSeedingIdleTime then
-        begin
-          { если раздача неактивна более заданного времени -- убираем ее из списка.
-            повторный подгруз раздачи при подключении пира извне (раздача перейдет в активный режим). }
-
-          FSeedings.Remove(Key);
-          Break;
-        end;
-      end;
-
-      { чистим черный список }
-      if FBlackListTime > 0 then
-      begin
-        if FBlackListCounter = 0 then
-        begin
-          for h in FBlackList.Keys do
-            if MinutesBetween(UtcNow, FBlackList[h]) >= FBlackListTime then
-            begin
-              FBlackList.Remove(h);
-              Break;
-            end;
-
-          FBlackListCounter := 10000;
-        end else
-          Dec(FBlackListCounter);
-      end;
-
-      DelayMicSec(100);
-    finally
-      Unlock;
-    end;
-
-    Result := not FTerminated;
-  end);
+  FThreads.Exec(Integer(TShareman), SyncSeedings);
 end;
 
-procedure TBittorrent.Stop;
+function TShareman.StartUnit(const AInfoHash: TUniString): Boolean;
+begin
+  Lock;
+  try
+    Result := FSeedings.ContainsKey(AInfoHash);
+
+    if Result then
+      FSeedings[AInfoHash].Start;
+  finally
+    Unlock;
+  end;
+end;
+
+procedure TShareman.Stop;
 begin
   FListener.Active := False;
   FTerminated := True;
 end;
 
-procedure TBittorrent.Unlock;
+function TShareman.StopUnit(const AInfoHash: TUniString): Boolean;
+begin
+  Lock;
+  try
+    Result := FSeedings.ContainsKey(AInfoHash);
+
+    if Result then
+      FSeedings[AInfoHash].Stop;
+  finally
+    Unlock;
+  end;
+end;
+
+function TShareman.SyncSeedings: Boolean;
+var
+  key: TUniString;
+  h: string;
+  t: TDateTime;
+begin
+  Lock;
+  try
+    t := Now;
+
+    { тут надо бы порядок добавления торрентов соблюсти, плюс добавить ограничение }
+    for key in FSeedings.Keys do
+    with FSeedings[key] do
+    begin
+      {$IFDEF PUBL_UTIL}
+      if ssActive in State then
+      {$ENDIF}
+      try
+        Sync;
+      except
+        {$IFDEF PUBL_UTIL}
+        on E: Exception do
+          DebugOutput('TShareman.SyncSeedings sync exception ' + E.ToString);
+        {$ENDIF}
+      end
+      {$IFDEF PUBL_UTIL}
+      else if MinutesBetween(t, LastRequest) >= DefaultSeedingIdleTime then
+      begin
+        DebugOutput('TShareman.SyncSeedings FSeedings.Remove(key)');
+        { если раздача неактивна более заданного времени -- убираем ее из списка.
+          повторный подгруз раздачи при подключении пира извне (раздача перейдет в активный режим). }
+
+        FSeedings.Remove(key);
+        DebugOutput('TShareman.SyncSeedings FSeedings.Remove(key) done');
+        Break;
+      end;
+      {$ENDIF}
+    end;
+
+    { сброс счётчика, если нет активных раздач }
+    (FCounter as IMutableCounter).Add(0, 0);
+
+    { чистим черный список }
+    if FBlackListTime > 0 then
+    begin
+      if FBlackListCounter = 0 then
+      begin
+        {$IFDEF PUBL_UTIL}
+        DebugOutput('TShareman.SyncSeedings clear blacklist');
+        {$ENDIF}
+
+        for h in FBlackList.Keys do
+          if MinutesBetween(t, FBlackList[h]) >= FBlackListTime then
+          begin
+            FBlackList.Remove(h);
+            Break;
+          end;
+
+        FBlackListCounter := 100000;
+      end else
+        Dec(FBlackListCounter);
+    end;
+  except
+    {$IFDEF PUBL_UTIL}
+    on E: Exception do
+      DebugOutput('TShareman.SyncSeedings exception ' + E.ToString);
+    {$ENDIF}
+  end;
+
+  Unlock;
+
+  if not FTerminated then
+    FThreads.Schedule(Integer(TShareman), 1, SyncSeedings);
+
+  Result := False;
+end;
+
+procedure TShareman.Unlock;
 begin
   System.TMonitor.Exit(FLock);
+end;
+
+{ TSeedingStatesHelper }
+
+function TSeedingStatesHelper.GetAsInteger: Integer;
+var
+  s: TSeedingState;
+begin
+  Result := 0;
+
+  for s := Low(TSeedingState) to High(TSeedingState) do
+    if s in Self then
+      Result := Result or (1 shl Ord(s));
+end;
+
+class function TSeedingStatesHelper.Parse(const Value: Integer): TSeedingStates;
+begin
+  Result.AsInteger := Value;
+end;
+
+procedure TSeedingStatesHelper.SetAsInteger(const Value: Integer);
+var
+  s: TSeedingState;
+  i: Integer;
+begin
+  for s := Low(TSeedingState) to High(TSeedingState) do
+  begin
+    i := 1 shl Ord(s);
+
+    if Value and i = i then
+      Include(Self, s)
+    else
+      Exclude(Self, s);
+  end;
 end;
 
 end.

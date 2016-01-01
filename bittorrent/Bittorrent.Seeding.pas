@@ -6,25 +6,28 @@ uses
   System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
   System.Math, System.DateUtils,
   Basic.UniString,
-  Bittorrent, Bittorrent.Bitfield, Bittorrent.Utils, BusyObj, Common.SortedList,
-  ThreadPool,
+  Bittorrent, Bittorrent.Bitfield, Bittorrent.Counter,
+  Common.BusyObj, Common.SortedList, Common.ThreadPool,
   IdGlobal, IdStack;
 
 type
-  { собственно раздача. одна раздача -- один торрент-файл }
+  { собственно раздача. одна раздача -- одна загрузка }
   TSeeding = class(TBusy, ISeeding)
   private
     const
-      MaxIdleTime          = 1;   { минут }
-      MaxPieceQueueSize    = 256; { максимальное кол-во запросов }
+      MinPeerRate          = -100;{ минимальный рейтинг, после которого блокируем отдачу пиру }
+      MaxIdleTime          = 5*60*1000; { 5 минут }
+      MaxPieceQueueSize    = 2048;{ максимальное кол-во запросов }
       { это значение необходимо рассчитывать, т.к. размер куска может быть разным (32 куска по 32 кб = 1 мегабайт) }
       MaxPeerPiecesCount   = 8;   { максимальное кол-во кусков, запрашиваемых с одного пира за раз }
-      MaxPieceQueueTimeout = 10;  { секунд (тоже зависит от скорости) }
-
+      MaxPieceQueueTimeout = 60;  { секунд (тоже зависит от скорости) }
+      MaxPieceRequestCount = 8;   { на сколько запросов мы можем ответить за проход }
+      CacheClearInterval   = 5;   { секунд }
     type
       IPieceQueue = interface
       ['{2A153346-D39E-48CE-9D84-7FFD5186C83A}']
         procedure CancelRequests(APeer: IPeer);
+        procedure CancelRequest(APeer: IPeer; APieceIndex, AOffset: Integer);
       end;
 
       IDownloadPieceQueue = interface(IPieceQueue)
@@ -44,10 +47,10 @@ type
       ['{21E227E7-EDCF-4CB0-9F4E-4E2861E39E85}']
         function GetIsEmpty: Boolean;
 
+        function CanEnqueue(APiece, AOffset, ASize: Integer; APeer: IPeer): Boolean;
         procedure Enqueue(APiece, AOffset, ASize: Integer; APeer: IPeer); { поставить в очередь }
-        procedure Dequeue(APeer: IPeer;
-          ADequeueProc: TProc<IPeer, {piece}Integer, {offset}Integer, {size}Integer>);
-        procedure Reject(APeer: IPeer); { отменить все запросы от пира (например он отключился) }
+        function Dequeue(APeer: IPeer;
+          ADequeueProc: TProc<IPeer, {piece}Integer, {offset}Integer, {size}Integer>): Boolean;
 
         property IsEmpty: Boolean read GetIsEmpty;
       end;
@@ -55,8 +58,10 @@ type
       TPieceQueue = class abstract(TInterfacedObject, IPieceQueue)
       protected
         procedure CancelRequests(APeer: IPeer); virtual; abstract;
+        procedure CancelRequest(APeer: IPeer; APieceIndex, AOffset: Integer); virtual; abstract;
       end;
 
+      // убрать здесь дублирование кода
       TDownloadPieceQueue = class(TPieceQueue, IDownloadPieceQueue)
       private
         type
@@ -71,6 +76,7 @@ type
         FBitField: TBitField;
         FList: TList<TDownloadPieceQueueItem>;
         FOnTimeout: TProc<Integer, IPeer>;
+        FOnCancel: TProc<Integer, IPeer>;
 
         function GetAsBitfield: TBitField; inline;
         function CanEnqueue(APeer: IPeer = nil): Boolean;
@@ -80,8 +86,10 @@ type
         procedure Timeout;
       protected
         procedure CancelRequests(APeer: IPeer); override;
+        procedure CancelRequest(APeer: IPeer; APieceIndex, AOffset: Integer); override;
       public
-        constructor Create(APieceCount: Integer; AOnTimeout: TProc<Integer, IPeer>);
+        constructor Create(APieceCount: Integer; AOnTimeout,
+          AOnCancel: TProc<Integer, IPeer>);
         destructor Destroy; override;
       end;
 
@@ -99,180 +107,324 @@ type
       private
         FList: TList<TUploadPieceQueueItem>;
         function GetIsEmpty: Boolean; inline;
+        function CanEnqueue(APiece, AOffset, ASize: Integer; APeer: IPeer): Boolean;
         procedure Enqueue(APiece, AOffset, ASize: Integer; APeer: IPeer); inline;
-        procedure Dequeue(APeer: IPeer; ADequeueProc: TProc<IPeer, Integer, Integer, Integer>);
-        procedure Reject(APeer: IPeer);
+        function Dequeue(APeer: IPeer; ADequeueProc: TProc<IPeer, Integer, Integer, Integer>): Boolean;
       protected
         procedure CancelRequests(APeer: IPeer); override;
+        procedure CancelRequest(APeer: IPeer; APieceIndex, AOffset: Integer); override;
       public
         constructor Create;
         destructor Destroy; override;
       end;
-  private
+  protected
     FLastRequest: TDateTime;
+    FLastCacheClear: TDateTime;
     FLock: TObject;
     FMetafile: IMetaFile;
     FMetafileMap: TSortedList<Integer, TUniString>;
-    FMetadataSize: Integer;
     FInfoHash: TUniString;
+    FClientID: TUniString;
     FFileSystem: IFileSystem;
     FDownloadPath: string;
+    FCounter: ICounter;
     FDownloadQueue: IDownloadPieceQueue; // список кусков, которые мы запросили (чтобы не запрашивать повторно)
     FUploadQueue: IUploadPieceQueue; // список кусков, которые с нас запросили
-    FPiecePicker: IPiecePicker;
+    FPiecePicker: IRequestFirstPicker;
     FThreadPool: TThreadPool;
     FPeers: TList<IPeer>; // их бы сортировать по скорости и количеству отдаваемго
-    FPieces: TDictionary<Integer, IPiece>;
-    FStates: TSeedingStates;
-    FClientVersion: string;
     FListenPort: TIdPort;
-    FBitField: TBitField; // то, что мы имеем
-    FOnMetadataLoaded: TProc<TUniString>;
+    FTrackers: TList<ITracker>;
+    FPiecesBuf: TDictionary<Integer, IPiece>;
+    FStates: TSeedingStates;
+    FBitField: TBitField; // маска загрузки
+    FPeersHave: TBitSum; // доступно на пирах
+    FItems: TList<ISeedingItem>; // для управления закачкой
+    FOnUpdate: TProc<ISeeding>;
+    FOnDelete: TProc<ISeeding>;
+    FOnUpdateCounter: TProc<ISeeding, UInt64, UInt64>;
+    FOverageCount: UInt64;
     FHashErrorCount: Integer;
   private
     function GetLastRequest: TDateTime; inline;
-    function GetPeers: TList<IPeer>; inline;
+    function GetPeers: TEnumerable<IPeer>; inline;
+    function GetPeersCount: Integer; inline;
+    function GetTrackers: TEnumerable<ITracker>; inline;
+    function GetTrackersCount: Integer; inline;
     function GetInfoHash: TUniString; inline;
     function GetBitfield: TBitField; inline;
+    function GetPeersHave: TBitSum; inline;
+    function GetItems: TEnumerable<ISeedingItem>; inline;
+    function GetItemsCount: Integer; inline;
     function GetMetafile: IMetaFile; inline;
     function GetFileSystem: IFileSystem; inline;
     function GetState: TSeedingStates; inline;
+    function GetOverageCount: UInt64; inline;
     function GetHashErrorCount: Integer; inline;
     function GetPercentComplete: Double; inline;
+    function GetCompeteSize: UInt64;
+    function GetTotalSize: UInt64; inline;
+    function GetCorruptedSize: UInt64; inline;
+    function GetCounter: ICounter; inline;
     function GetDownloadPath: string; inline;
-    function GetOnMetadataLoaded: TProc<TUniString>; inline;
-    procedure SetOnMetadataLoaded(Value: TProc<TUniString>); inline;
-    procedure OnPeerExtendedMessage(APeer: IPeer; AMessage: IExtension);
+    function GetOnUpdate: TProc<ISeeding>; inline;
+    procedure SetOnUpdate(Value: TProc<ISeeding>); inline;
+    function GetOnDelete: TProc<ISeeding>; inline;
+    procedure SetOnDelete(Value: TProc<ISeeding>); inline;
+    function GetOnUpdateCounter: TProc<ISeeding, UInt64, UInt64>; inline;
+    procedure SetOnUpdateCounter(Value: TProc<ISeeding, UInt64, UInt64>); inline;
 
-    procedure AddPeer(const AHost: string; APort: TIdPort; APeerID: string;
+    procedure OnGetBitField(ACallback: TProc<TBitField>);
+    function OnGetState(AItem: ISeedingItem): TSeedingStates;
+    function OnRequire(AItem: ISeedingItem; AOffset, ALength: Int64): Boolean;
+
+    procedure Update; inline;
+    procedure UpdateCounter(APeer: IPeer; ADown, AUpl: UInt64); inline;
+
+    procedure AddPeer(const AHost: string; APort: TIdPort;
       AIPVer: TIdIPVersion = Id_IPv4); overload;
-    procedure AddPeer(APeer: IPeer; AHSMessage: IHandshakeMessage); overload;
+    procedure AddPeer(APeer: IPeer); overload; inline;
+    procedure AddTracker(ATracker: ITracker); inline;
+    procedure RemovePeer(APeer: IPeer); inline;
+
+    procedure CancelReuests(APiece: Integer; APeer: IPeer);
+
     procedure Touch; inline;
-    procedure Delete(ADeleteFiles: Boolean = False); inline;
+    procedure CancelDownloading;
+    // управлять состоянием можно только у ЗАГРУЖАЕМОЙ раздачи
+    procedure Start; inline;
+    procedure Pause; inline;
+    procedure Stop; inline;
+    procedure Delete(ADeleteFiles: Boolean = False);
+
+    procedure MarkAsError; inline; // раздача с ошибкой
+
+    function Require(AItem: ISeedingItem; AOffset, ALength: Int64): Boolean;
 
     { обработчики событий пира }
     procedure OnPeerConnect(APeer: IPeer; AMessage: IMessage);
+    procedure OnPeerDisconnect(APeer: IPeer);
     procedure OnPeerException(APeer: IPeer; AException: Exception);
+    procedure OnPeerStart(APeer: IPeer; AInfoHash: TUniString;
+      ABitField: TBitField);
+    procedure OnPeerHave(APeer: IPeer; APieceIndex: Integer);
 
     procedure OnPeerRequest(APeer: IPeer; APieceIndex, AOffset, ASize: Integer);
-    procedure OnPeerPiece(APeer: IPeer; AIndex, AOffset: Integer; AData: TUniString);
+    procedure OnPeerCancel(APeer: IPeer; APieceIndex, AOffset: Integer);
+    procedure OnPeerPiece(APeer: IPeer; APieceIndex, AOffset: Integer;
+      AHash, AData: TUniString);
     procedure OnPeerChoke(APeer: IPeer);
     procedure OnPeerInterest(APeer: IPeer);
 
     procedure Lock; inline;
     procedure Unlock; inline;
 
-    procedure InitMetadata(AMetafile: IMetaFile);
-
-    procedure ApplyPeerCallbacks(APeer: IPeer);
+    procedure DisconnectAllPeers;
+    function ApplyPeerCallbacks(APeer: IPeer): IPeer;
+    procedure RemovePeerCallbacks(APeer: IPeer); inline;
   protected
     procedure DoSync; override;
+
+    function CreatePeer(const AIP: string; APort: TIdPort;
+      AIPVer: TIdIPVersion): IPeer; virtual;
+    function CreateFileSystem(AMetaFile: IMetaFile;
+      const ADownloadFolder: string): IFileSystem; virtual;
+
+    procedure PrepareWritePiece(APiece: IPiece); virtual;
   public
     constructor Create(const ADownloadPath: string; AThreadPoolEx: TThreadPool;
-      AInfoHash: TUniString; AClientVersion: string; AListenPort: TIdPort); overload;
-    constructor Create(const ADownloadPath: string; AThreadPoolEx: TThreadPool;
-      AMetafile: IMetaFile; AClientVersion: string; AListenPort: TIdPort); overload;
+      const AClientID: TUniString; AMetafile: IMetaFile;
+      const ABitField: TBitField; AStates: TSeedingStates; AListenPort: TIdPort);
     destructor Destroy; override;
   end;
 
 implementation
 
 uses
-  Bittorrent.Peer, Bittorrent.Messages, Bittorrent.Extensions, Bittorrent.Piece,
-  Bittorrent.MetaFile, Bittorrent.PiecePicker, Bittorrent.FileSystem;
+  Bittorrent.Peer, Bittorrent.Messages, Bittorrent.Piece, Bittorrent.MetaFile,
+  Bittorrent.PiecePicker, Bittorrent.FileSystem, Bittorrent.SeedingItem,
+  Bittorrent.Tracker;
 
 { TSeeding }
 
-procedure TSeeding.AddPeer(const AHost: string; APort: TIdPort; APeerID: string;
-  AIPVer: TIdIPVersion);
+procedure TSeeding.AddPeer(const AHost: string; APort: TIdPort; AIPVer: TIdIPVersion);
 var
   peer: IPeer;
+  h: Integer;
+  ip: string;
 begin
   Lock;
   try
-    for peer in FPeers do
-      if (peer.Host   = AHost ) and
-         (peer.Port   = APort ) and
-         (peer.IPVer  = AIPVer) then
-        Exit;
+    // добавляем пиры только тогда, когда качаем
+    if (ssDownloading in FStates) and not (ssPaused in FStates) then
+    begin
+      TIdStack.IncUsage;
+      try
+        ip := GStack.ResolveHost(AHost);
+        h  := TPeer.CalcHashCode(ip, APort);
 
-    peer := TPeer.Create(FThreadPool, AHost, APort, GetInfoHash, APeerID, AIPVer);
-    FPeers.Add(peer);
-    ApplyPeerCallbacks(peer);
+        for peer in FPeers do
+          if peer.HashCode = h then
+            Exit;
+
+        FPeers.Add(ApplyPeerCallbacks(CreatePeer(ip, APort, AIPVer)));
+
+        Touch; { пинаем раздачу, пусть пробует качать }
+      finally
+        TIdStack.DecUsage;
+      end;
+    end;
   finally
     Unlock;
   end;
 end;
 
-procedure TSeeding.AddPeer(APeer: IPeer; AHSMessage: IHandshakeMessage);
-var
-  peer: IPeer;
+procedure TSeeding.AddPeer(APeer: IPeer);
 begin
   Lock;
   try
-    { вынести в отдельную ф-ю }
-    for peer in FPeers do
-      if (peer.Host   = APeer.Host ) and  { внешний порт каждый раз разный, поэтому не проверяем }
-         (peer.IPVer  = APeer.IPVer) then
-        raise Exception.Create('Peer already connected');
+    FPeers.Add(ApplyPeerCallbacks(APeer));
 
-    FPeers.Add(APeer);
-    ApplyPeerCallbacks(APeer);
-    OnPeerConnect(APeer, AHSMessage);
+    APeer.SendBitfield(FBitField);
   finally
     Unlock;
   end;
 end;
 
-procedure TSeeding.ApplyPeerCallbacks(APeer: IPeer);
+procedure TSeeding.AddTracker(ATracker: ITracker);
 begin
-  APeer.OnConnect         := OnPeerConnect;
-  APeer.OnException       := OnPeerException;
-  APeer.OnRequest         := OnPeerRequest;
-  APeer.OnPiece           := OnPeerPiece;
-  APeer.OnChoke           := OnPeerChoke;
-  APeer.OnInterest        := OnPeerInterest;
-  APeer.OnExtendedMessage := OnPeerExtendedMessage;
+  Lock;
+  try
+    if not FTrackers.contains(ATracker) then
+      FTrackers.Add(ATracker);
+  finally
+    Unlock;
+  end;
+end;
+
+function TSeeding.ApplyPeerCallbacks(APeer: IPeer): IPeer;
+begin
+  Result := APeer;
+
+  Result.OnConnect       := OnPeerConnect;
+  Result.OnDisonnect     := OnPeerDisconnect;
+  Result.OnException     := OnPeerException;
+  Result.OnStart         := OnPeerStart;
+  Result.OnRequest       := OnPeerRequest;
+  Result.OnHave          := OnPeerHave;
+  Result.OnCancel        := OnPeerCancel;
+  Result.OnPiece         := OnPeerPiece;
+  Result.OnChoke         := OnPeerChoke;
+  Result.OnInterest      := OnPeerInterest;
+  Result.OnUpdateCounter := UpdateCounter;
+end;
+
+procedure TSeeding.CancelDownloading;
+var
+  p: IPeer;
+begin
+  Lock;
+  try
+    for p in FPeers do
+      FDownloadQueue.CancelRequests(p);
+  finally
+    Unlock;
+  end;
 end;
 
 constructor TSeeding.Create(const ADownloadPath: string;
-  AThreadPoolEx: TThreadPool; AMetafile: IMetaFile; AClientVersion: string;
-  AListenPort: TIdPort);
-begin
-  Create(ADownloadPath, AThreadPoolEx, AMetafile.InfoHash, AClientVersion, AListenPort);
-  InitMetadata(AMetafile);
-end;
-
-constructor TSeeding.Create(const ADownloadPath: string;
-  AThreadPoolEx: TThreadPool; AInfoHash: TUniString; AClientVersion: string;
-  AListenPort: TIdPort);
+  AThreadPoolEx: TThreadPool; const AClientID: TUniString; AMetafile: IMetaFile;
+  const ABitField: TBitField; AStates: TSeedingStates; AListenPort: TIdPort);
+var
+  it: IFileItem;
+  //s: string;
 begin
   inherited Create;
 
-  FThreadPool := AThreadPoolEx;
-  FLock         := TObject.Create;
+  FHashErrorCount := 0;
+  FOverageCount   := 0;
+  FThreadPool     := AThreadPoolEx;
+  FClientID       := AClientID;
+  FMetafile       := AMetafile;
+  FLastRequest    := Now;
+  FLastCacheClear := Now;
+  FInfoHash.Assign(AMetafile.InfoHash);
+  FDownloadPath   := ADownloadPath;
 
-  FPeers        := System.Generics.Collections.TList<IPeer>.Create;
+  FCounter        := TCounter.Create;
 
-  FPieces       := System.Generics.Collections.TDictionary<Integer, IPiece>.Create;
-  FPiecePicker  := TRarestPicker.Create;
+  FLock           := TObject.Create;
 
-  FStates       := [ssActive];
-  FInfoHash.Assign(AInfoHash);
+  FPeers          := TList<IPeer>.Create;
+  FTrackers       := TList<ITracker>.Create;
+  FListenPort     := AListenPort;
 
-  FDownloadPath := ADownloadPath;
-  FClientVersion:= AClientVersion;
-  FListenPort   := AListenPort;
+  {for s in FMetafile.Trackers do
+    FTrackers.Add(CreateTracker(s, AListenPort));}
 
-  FLastRequest  := UtcNow;
+  FItems          := TList<ISeedingItem>.Create;
+  for it in FMetafile.Files do
+    FItems.Add(TSeedingItem.Create(ADownloadPath, it, AMetafile.PiecesLength,
+      OnGetBitField, OnGetState, OnRequire));
 
-  FMetafileMap  := TSortedList<Integer, TUniString>.Create(
+  FPiecesBuf      := System.Generics.Collections.TDictionary<Integer, IPiece>.Create;
+  FPiecePicker    := TRequestFirstPicker.Create(
+      TPriorityPicker.Create(
+        TRarestFirstPicker.Create(
+          TRandomPicker.Create(
+            TLinearPicker.Create(nil, 1),
+          10),
+        20),
+      30, FItems),
+    30);
+
+  FFileSystem     := CreateFileSystem(AMetafile, ADownloadPath);
+
+  FBitField       := TBitField.Create(AMetafile.PiecesCount);
+  FBitField.CopyFrom(ABitField);
+
+  { если закачка с нуля, проверяем файлы в папке назначения }
+  if FBitField.AllFalse then
+    FBitField     := FFileSystem.CheckFiles;
+
+  FPeersHave      := TBitSum.Create(FBitField.Len);
+
+  FDownloadQueue:= TDownloadPieceQueue.Create(AMetafile.PiecesCount, CancelReuests,
+    CancelReuests);
+  FUploadQueue    := TUploadPieceQueue.Create;
+
+  if AStates = [] then
+  begin
+    FStates   := [ssHaveMetadata];
+
+    if FBitField.AllTrue then
+      FStates := FStates + [ssCompleted] - [ssDownloading] { всё загружено, переводить в активный режим нет смысла }
+    else
+      FStates := FStates + [ssActive, ssDownloading] - [ssCompleted]; { загружается }
+  end else
+    FStates := AStates;
+
+  FLastRequest    := Now;
+
+  FMetafileMap    := TSortedList<Integer, TUniString>.Create(
     TDelegatedComparer<Integer>.Create(
       function (const Left, Right: Integer): Integer
       begin
         Result  := Left - Right;
       end) as IComparer<Integer>
   );
+end;
+
+function TSeeding.CreateFileSystem(AMetaFile: IMetaFile;
+  const ADownloadFolder: string): IFileSystem;
+begin
+  Result := TFileSystem.Create(AMetafile, ADownloadFolder);
+end;
+
+function TSeeding.CreatePeer(const AIP: string; APort: TIdPort;
+  AIPVer: TIdIPVersion): IPeer;
+begin
+  Result := TPeer.Create(FThreadPool, AIP, APort, FInfoHash, FClientID, AIPVer);
 end;
 
 procedure TSeeding.Delete(ADeleteFiles: Boolean = False);
@@ -286,20 +438,107 @@ begin
   finally
     Unlock;
   end;
+
+  if Assigned(FOnDelete) then
+    FOnDelete(Self);
 end;
 
 destructor TSeeding.Destroy;
 begin
+  FStates := [];
+
+  DisconnectAllPeers;
+
   FPeers.Free;
-  FPieces.Free;
+  FTrackers.Free;
+  FItems.Free;
+  FPiecesBuf.Free;
   FLock.Free;
   FMetafileMap.Free;
   inherited;
 end;
 
+procedure TSeeding.DisconnectAllPeers;
+var
+  i: Integer;
+  it: IPeer;
+begin
+  for i := FPeers.Count - 1 downto 0 do
+  begin
+    it := FPeers[i];
+
+    if it.ConnectionConnected then
+      it.Disconnect
+    else
+    begin
+      FDownloadQueue.CancelRequests(it);
+      FUploadQueue.CancelRequests(it);
+    end;
+
+    RemovePeerCallbacks(it);
+  end;
+end;
+
+function TSeeding.GetPeersHave: TBitSum;
+begin
+  Result := FPeersHave;
+end;
+
 function TSeeding.GetBitfield: TBitField;
 begin
   Result := FBitField;
+end;
+
+function TSeeding.GetCompeteSize: UInt64;
+var
+  i: Integer;
+begin
+  if ssHaveMetadata in FStates then
+  begin
+    Lock;
+    try
+      Result := 0;
+
+      // кол-во завершенных кусков * размер куска
+      for i := 0 to FBitField.Len - 1 do
+        if FBitField[i] then
+          Inc(Result, FMetafile.PieceLength[i]);
+    finally
+      Unlock;
+    end;
+  end else
+    Result := 0;
+end;
+
+function TSeeding.GetCorruptedSize: UInt64;
+begin
+  if ssHaveMetadata in FStates then
+    Result := FHashErrorCount * FMetafile.PiecesLength
+  else
+    Result := 0;
+end;
+
+function TSeeding.GetTotalSize: UInt64;
+begin
+  if ssHaveMetadata in FStates then
+    Result := FMetafile.TotalSize
+  else
+    Result := 0;
+end;
+
+function TSeeding.GetTrackers: TEnumerable<ITracker>;
+begin
+  Result := FTrackers;
+end;
+
+function TSeeding.GetTrackersCount: Integer;
+begin
+  Result := FTrackers.Count;
+end;
+
+function TSeeding.GetCounter: ICounter;
+begin
+  Result := FCounter;
 end;
 
 function TSeeding.GetDownloadPath: string;
@@ -322,6 +561,16 @@ begin
   Result := FInfoHash;
 end;
 
+function TSeeding.GetItems: TEnumerable<ISeedingItem>;
+begin
+  Result := FItems;
+end;
+
+function TSeeding.GetItemsCount: Integer;
+begin
+  Result := FItems.Count;
+end;
+
 function TSeeding.GetLastRequest: TDateTime;
 begin
   Result := FLastRequest;
@@ -332,20 +581,45 @@ begin
   Result := FMetafile;
 end;
 
-function TSeeding.GetOnMetadataLoaded: TProc<TUniString>;
+function TSeeding.GetOnDelete: TProc<ISeeding>;
 begin
-  Result := FOnMetadataLoaded;
+  Result := FOnDelete;
 end;
 
-function TSeeding.GetPeers: System.Generics.Collections.TList<IPeer>;
+function TSeeding.GetOnUpdate: TProc<ISeeding>;
+begin
+  Result := FOnUpdate;
+end;
+
+function TSeeding.GetOnUpdateCounter: TProc<ISeeding, UInt64, UInt64>;
+begin
+  Result := FOnUpdateCounter;
+end;
+
+function TSeeding.GetOverageCount: UInt64;
+begin
+  Result := FOverageCount;
+end;
+
+function TSeeding.GetPeers: TEnumerable<IPeer>;
 begin
   Result := FPeers;
 end;
 
+function TSeeding.GetPeersCount: Integer;
+begin
+  Result := FPeers.Count;
+end;
+
 function TSeeding.GetPercentComplete: Double;
 begin
-  with FBitField do
-    Result := CheckedCount / Len * 100;
+  Lock;
+  try
+    with FBitField do
+      Result := CheckedCount / Len * 100;
+  finally
+    Unlock;
+  end;
 end;
 
 function TSeeding.GetState: TSeedingStates;
@@ -353,27 +627,40 @@ begin
   Result := FStates;
 end;
 
-procedure TSeeding.InitMetadata(AMetafile: IMetaFile);
-begin
-  FMetafile     := AMetafile;
-  FMetadataSize := AMetafile.MetadataSize;
-  FStates       := FStates + [ssHaveMetadata];
-  FFileSystem   := TFileSystem.Create(AMetafile, FDownloadPath);
-  FBitField     := FFileSystem.CheckFiles; { проверять файлы надо только в том случае, если раздача сохраняется поверх существующих файлов (проверка на больших раздачах долгая) }
-  FDownloadQueue:= TDownloadPieceQueue.Create(AMetafile.PiecesCount, nil); { надо обрабатывать событие таймаута }
-  FUploadQueue  := TUploadPieceQueue.Create;
-
-  if FBitField.AllTrue then
-    FStates := FStates + [ssCompleted] - [ssDownloading] { всё загружено }
-  else
-    FStates := FStates + [ssDownloading] - [ssCompleted]; { загружается }
-
-  FLastRequest  := UtcNow;
-end;
-
 procedure TSeeding.Lock;
 begin
   System.TMonitor.Enter(FLock);
+end;
+
+procedure TSeeding.MarkAsError;
+begin
+  FStates := [ssError];
+  DisconnectAllPeers;
+end;
+
+procedure TSeeding.OnGetBitField(ACallback: TProc<TBitField>);
+begin
+  Lock;
+  try
+    ACallback(FBitField);
+  finally
+    Unlock;
+  end;
+end;
+
+function TSeeding.OnGetState(AItem: ISeedingItem): TSeedingStates;
+begin
+  Result := FStates;
+end;
+
+procedure TSeeding.OnPeerCancel(APeer: IPeer; APieceIndex, AOffset: Integer);
+begin
+  Lock;
+  try
+    FDownloadQueue.CancelRequest(APeer, APieceIndex, AOffset);
+  finally
+    Unlock;
+  end;
 end;
 
 procedure TSeeding.OnPeerChoke(APeer: IPeer);
@@ -391,20 +678,6 @@ begin
   Lock;
   try
     Assert(Supports(APeer, IPeer));
-    Assert(Supports(AMessage, IHandshakeMessage));
-
-    if (AMessage as IHandshakeMessage).SupportsDHT then
-      (APeer as IPeer).SendPort(12345); { наш порт входящих соединений (DHT port) }
-
-    if (AMessage as IHandshakeMessage).SupportsExtendedMessaging then
-    begin
-      if Assigned(FMetafile) then
-        (APeer as IPeer).SendExtensionMessage(TExtensionHandshake.Create(FClientVersion,
-          FListenPort, FMetafile.MetadataSize) as IExtension)
-      else
-        (APeer as IPeer).SendExtensionMessage(TExtensionHandshake.Create(FClientVersion,
-          FListenPort, 0) as IExtension);
-    end;
 
     { сразу отправляем ему bitfield, если есть }
     if ssHaveMetadata in FStates then
@@ -414,119 +687,28 @@ begin
   end;
 end;
 
-procedure TSeeding.OnPeerException(APeer: IPeer; AException: Exception);
+procedure TSeeding.OnPeerDisconnect(APeer: IPeer);
 begin
-  { сетевая ошибка -- выбрасываем из списка пиров }
   Lock;
   try
-    FPeers.Remove(APeer);
-    {if Assigned(FOnPeerError) then
-      FOnPeerError(APeerSelf);}
+    FPeersHave := FPeersHave - APeer.Bitfield;
+    RemovePeer(APeer);
   finally
     Unlock;
   end;
 end;
 
-procedure TSeeding.OnPeerExtendedMessage(APeer: IPeer; AMessage: IExtension);
-var
-  hs: IExtensionHandshake;
-  md: IExtensionMetadata;
-  i, j: Integer;
-  tmp: TUniString;
-  it: IPeer;
+procedure TSeeding.OnPeerException(APeer: IPeer; AException: Exception);
+begin
+  RemovePeer(APeer);
+end;
+
+procedure TSeeding.OnPeerHave(APeer: IPeer; APieceIndex: Integer);
 begin
   Lock;
   try
-    //Assert(Supports(APeer, IPeer));
-
-    if Supports(AMessage, IExtensionHandshake, hs) then
-    begin
-      {$REGION 'handshake'}
-      if (hs.MetadataSize > 0) and not(ssHaveMetadata in FStates) then
-      begin
-        { prepare for loading metadata }
-        Assert(APeer.ExteinsionSupports.ContainsKey(TExtensionMetadata.GetClassSupportName));
-
-        FMetadataSize := hs.MetadataSize;
-        { request all metadata pieces }
-        i := 0;
-        j := 0;
-
-        while j < FMetadataSize do
-        begin
-          if not FMetafileMap.ContainsKey(i) then
-            APeer.SendExtensionMessage(TExtensionMetadata.Create(mmtRequest, i) as IExtensionMetadata);
-
-          Inc(i);
-          Inc(j, TExtensionMetadata.BlockSize);
-        end;
-      end;
-      {$ENDREGION}
-
-      // coment
-      APeer.SendExtensionMessage(TExtensionComment.Create(cmtRequest) as IExtensionComment);
-    end else
-    if Supports(AMessage, IExtensionMetadata, md) then
-    begin
-      {$REGION 'metadata'}
-      { receive, store }
-      case md.MessageType of
-        mmtRequest:
-          begin
-            { they ask us }
-            tmp := FMetafile.Metadata;
-            { проверка правильности указания куска }
-            Assert(md.Piece * TExtensionMetadata.BlockSize <= tmp.Len);
-            (APeer as IPeer).SendExtensionMessage(TExtensionMetadata.Create(
-              mmtData,
-              md.Piece,
-              tmp.Copy(md.Piece * TExtensionMetadata.BlockSize,
-                  Min(TExtensionMetadata.BlockSize,
-                      tmp.Len - md.Piece * TExtensionMetadata.BlockSize))
-            ));
-          end;
-
-        mmtData:
-          begin
-            FMetafileMap.Add(md.Piece, md.Metadata);
-            { check infohash }
-            tmp.Len := 0;
-
-            for i in FMetafileMap.Keys do
-              tmp := tmp + FMetafileMap[i].Value;
-
-            if tmp.Len = FMetadataSize then
-            begin
-              if SHA1(tmp) = FInfoHash then
-              begin
-                { hurray! metafile successfully loaded }
-                InitMetadata(TMetaFile.Create(tmp) as IMetaFile);
-
-                { отправляем bitfield всем! }
-                for it in FPeers do
-                  it.SendBitfield(FBitField);
-
-                if Assigned(FOnMetadataLoaded) then
-                  FOnMetadataLoaded(tmp);
-              end else
-              begin
-                { sad :( }
-                FMetafileMap.Clear;
-                FMetadataSize := 0;
-              end;
-            end;
-          end;
-
-        mmtReject: { peer dont have this piece }
-          begin
-          end;
-      end;
-      {$ENDREGION}
-    end else
-    if Supports(AMessage, IExtensionComment) then
-    begin
-      Sleep(0);
-    end;
+    { добавляем в сумму индекс, который до этого отсутствовал у пира }
+    FPeersHave.Inc(APieceIndex);
   finally
     Unlock;
   end;
@@ -536,9 +718,6 @@ procedure TSeeding.OnPeerInterest(APeer: IPeer);
 begin
   Lock;
   try
-    { смотрим, интересен ли он нам }
-    { если мы полный источник или у него есть что-то для нас интересное -- расчокиваем }
-    { наверное логично было бы проверять (APeer.Bitfield and not FHaveMask).TrueCount >= n }
     if (ssCompleted in FStates) or not (not APeer.Bitfield and FBitField).AllFalse then
       APeer.Unchoke;
   finally
@@ -546,65 +725,86 @@ begin
   end;
 end;
 
-procedure TSeeding.OnPeerPiece(APeer: IPeer; AIndex, AOffset: Integer;
-  AData: TUniString);
+procedure TSeeding.OnPeerPiece(APeer: IPeer; APieceIndex, AOffset: Integer;
+  AHash, AData: TUniString);
 var
-  dat: TUniString;
   p: IPiece;
   it: IPeer;
 begin
   Lock;
   try
-    dat := AData; // напрямую дельфи не хочет работать, попросту падает компилятор
-    Assert(dat.Len <= TPiece.BlockLength);
+    { когда нам приходит левый кусок, по идее надо кикать пира }
+    if APieceIndex >= FMetafile.PiecesCount then
+      raise EProtocolWrongPiece.CreateFmt('Wrong piece (%d)', [APieceIndex]);
 
-    if FPieces.ContainsKey(AIndex) then
+    if FBitField[APieceIndex] then
     begin
-      p := FPieces[AIndex];
-      p.AddBlock(AOffset, dat);
+      Inc(FOverageCount, AData.Len);
+      {$IFDEF DEBUG}
+      DebugOutput('Ненужный кусок ' + APieceIndex.ToString);
+      {$ENDIF}
+      Exit;
+    end;
+
+    if FPiecesBuf.ContainsKey(APieceIndex) then
+    begin
+      p := FPiecesBuf[APieceIndex];
+      p.AddBlock(AOffset, AData);
     end else
     begin
       // newpiece
-      p := TPiece.Create(AIndex, FMetafile.PieceLength[AIndex], AOffset, dat);
-      FPieces.Add(AIndex, p);
+      p := TPiece.Create(APieceIndex, FMetafile.PieceLength[APieceIndex], AOffset, AData);
+      FPiecesBuf.Add(APieceIndex, p);
     end;
 
+    // hash
+    if (AHash.Len > 0) and (p.HashTree.Len = 0) then
+      p.HashTree := AHash;
+
     if p.Completed then
-    begin
+    try
       try
+        PrepareWritePiece(p);
         FFileSystem.PieceWrite(p);
       except
         on E: EFileSystemWriteException do
         begin
-          FStates := [ssError];
-          FPieces.Clear;
+          FPiecesBuf.Clear;
+          MarkAsError;
           raise;
         end;
 
         on E: EFileSystemCheckException do
         begin
           { выбрасываем кусок }
-          FPieces.Remove(AIndex);
+          FPiecesBuf.Remove(APieceIndex);
           Inc(FHashErrorCount);
           Exit;
         end;
 
         on E: Exception do
         begin
-          FStates := [ssError];
-          FPieces.Clear;
+          FPiecesBuf.Clear;
+          MarkAsError;
           raise;
         end;
       end;
 
-      FBitField[AIndex] := True; { делаем отметку, что кусок загружен }
-      FDownloadQueue.Dequeue(AIndex); { выбрасываем из буфера закачек }
+      //DebugOutput('Получил ' + APieceIndex.ToString);
+
+      FBitField[APieceIndex] := True; { делаем отметку, что кусок загружен }
+      FDownloadQueue.Dequeue(APieceIndex); { выбрасываем из буфера закачек }
 
       for it in FPeers do
+      begin
         {if it.HaveMask[AIndex] then  (типа разослать только тем, у кого есть кусок?)}
-        it.SendHave(AIndex);
+        it.SendHave(APieceIndex);
 
-      FPieces.Remove(AIndex);
+        { рассылаем всем отмену запрошенного куска, если запрашивали }
+        //it.Cancel();
+      end;
+
+      FPiecesBuf.Remove(APieceIndex);
 
       { всё загружено? }
       if FBitField.AllTrue then
@@ -616,8 +816,10 @@ begin
           if pfWeInterested in it.Flags then
             it.NotInterested;
       end;
+    finally
+      Update;
     end else
-      FDownloadQueue.Touch(AIndex); { продлеваем жизнь запрашиваемому куску }
+      FDownloadQueue.Touch(APieceIndex); { продлеваем жизнь запрашиваемому куску }
   finally
     Unlock;
   end;
@@ -633,25 +835,171 @@ begin
     Assert(not (pfWeChoke in APeer.Flags));
     Assert(FBitField[APieceIndex]);
 
-    { добавляем в очередь на отправку }
-    //DebugOutput(Format('add peer request piece=%d offset=%d size=%d', [APieceIndex, AOffset, ASize]));
-    FUploadQueue.Enqueue(APieceIndex, AOffset, ASize, APeer);
+    { добавляем в очередь на отправку
+      (запрещаем повторные реквесты, ибо гарантируем отдачу куска) }
+    with FUploadQueue do
+      if CanEnqueue(APieceIndex, AOffset, ASize, APeer) then
+        Enqueue(APieceIndex, AOffset, ASize, APeer);
   finally
     Unlock;
   end;
 end;
 
-procedure TSeeding.SetOnMetadataLoaded(Value: TProc<TUniString>);
+procedure TSeeding.OnPeerStart(APeer: IPeer; AInfoHash: TUniString;
+  ABitField: TBitField);
 begin
-  FOnMetadataLoaded := Value;
+  Lock;
+  try
+    // пополняем список доступности
+    FPeersHave := FPeersHave + ABitField;
+  finally
+    Unlock;
+  end;
+end;
+
+function TSeeding.OnRequire(AItem: ISeedingItem; AOffset,
+  ALength: Int64): Boolean;
+begin
+  Result := Require(AItem, AOffset, ALength);
+end;
+
+procedure TSeeding.Pause;
+begin
+  Lock;
+  try
+    if ssDownloading in FStates then
+    begin
+      FStates := FStates + [ssPaused];
+      CancelDownloading;
+      Update;
+    end;
+  finally
+    Unlock;
+  end;
+end;
+
+procedure TSeeding.PrepareWritePiece(APiece: IPiece);
+begin
+  Assert(not APiece.HashTree.Empty);
+end;
+
+procedure TSeeding.CancelReuests(APiece: Integer; APeer: IPeer);
+begin
+  {$IFDEF DEBUG}
+  DebugOutput('отмена запрошенного куска ' + APiece.ToString);
+  {$ENDIF}
+
+  TPiece.EnumBlocks(FMetafile.PieceLength[APiece],
+    procedure (AOffset, ALength: Integer)
+    begin
+      APeer.Cancel(APiece, AOffset);
+    end);
+end;
+
+procedure TSeeding.RemovePeer(APeer: IPeer);
+begin
+  Lock;
+  try
+    FDownloadQueue.CancelRequests(APeer);
+    FUploadQueue.CancelRequests(APeer);
+
+    RemovePeerCallbacks(APeer);
+
+    FPeers.Remove(APeer);
+  finally
+    Unlock;
+  end;
+end;
+
+procedure TSeeding.RemovePeerCallbacks(APeer: IPeer);
+begin
+  APeer.OnConnect       := nil;
+  APeer.OnDisonnect     := nil;
+  APeer.OnException     := nil;
+  APeer.OnStart         := nil;
+  APeer.OnRequest       := nil;
+  APeer.OnHave          := nil;
+  APeer.OnCancel        := nil;
+  APeer.OnPiece         := nil;
+  APeer.OnChoke         := nil;
+  APeer.OnInterest      := nil;
+  APeer.OnUpdateCounter := nil;
+end;
+
+function TSeeding.Require(AItem: ISeedingItem; AOffset,
+  ALength: Int64): Boolean;
+var
+  i, fp, lp: Integer;
+begin
+  Lock;
+  try
+    Result := False;
+
+    if (AItem.Priority <> fpSkip) and not AItem.IsLoaded(AOffset, ALength) then
+    begin
+      { определяем нужные куски и смотрим, есть ли они в очереди }
+      fp := AItem.FirstPiece + AOffset div FMetafile.PiecesLength;
+      lp := AItem.FirstPiece + (AOffset + ALength) div FMetafile.PiecesLength;
+
+      for i := lp downto fp do
+        Result := FPiecePicker.Push(i) or Result;
+    end;
+  finally
+    Unlock;
+  end;
+end;
+
+procedure TSeeding.SetOnDelete(Value: TProc<ISeeding>);
+begin
+  FOnDelete := Value;
+end;
+
+procedure TSeeding.SetOnUpdate(Value: TProc<ISeeding>);
+begin
+  FOnUpdate := Value;
+end;
+
+procedure TSeeding.SetOnUpdateCounter(Value: TProc<ISeeding, UInt64, UInt64>);
+begin
+  FOnUpdateCounter := Value;
+end;
+
+procedure TSeeding.Start;
+begin
+  Lock;
+  try
+    if ssDownloading in FStates then
+    begin
+      FStates := FStates + [ssActive] - [ssPaused];
+      Update;
+    end;
+  finally
+    Unlock;
+  end;
+end;
+
+procedure TSeeding.Stop;
+begin
+  Lock;
+  try
+    if ssDownloading in FStates then
+    begin
+      FStates := FStates - [ssActive, ssPaused];
+      CancelDownloading;
+      Update;
+    end;
+  finally
+    Unlock;
+  end;
 end;
 
 procedure TSeeding.Touch;
 begin
   Lock;
   try
-    FLastRequest := UtcNow;
+    FLastRequest := Now;
     FStates := FStates + [ssActive];
+    Update;
   finally
     Unlock;
   end;
@@ -659,106 +1007,157 @@ end;
 
 procedure TSeeding.DoSync;
 var
+  tr: ITracker;
+  trstat: IStatTracker;
   peer: IPeer;
   want: TBitField;
   haveMD,
   weLoad,
   alive: Boolean;
+  pieceIdx: Integer;
+  t: TTime;
 begin
   Lock;
   try
+    { устанавливаем данные трекерам и вызываем им всем Sync }
+    for tr in FTrackers do
+      if not tr.Busy then
+      begin
+        if Supports(tr, IStatTracker, trstat) then
+        with trstat do
+        begin
+          BytesUploaded    := FCounter.TotalUploaded;
+          BytesDownloaded  := GetCompeteSize;
+          BytesLeft        := GetTotalSize - GetCompeteSize;
+          BytesCorrupt     := GetCorruptedSize;
+        end;
+
+        tr.Sync;
+      end;
+
     if not(ssActive in FStates) then
       Exit;
 
-    haveMD  := ssHaveMetadata in FStates;
-    weLoad  := ssDownloading  in FStates;
+    haveMD  := (ssHaveMetadata in FStates);
+    weLoad  := (ssDownloading  in FStates) and not (ssPaused in FStates);
     alive   := False;
 
     if haveMD and weLoad then
     begin
-      { вынести бы в ф-ю, чтобы каждый раз не мозолить }
-      want := not FBitField;
-      want := want and not FDownloadQueue.AsBitfield;
-    end;
+      want := (not FBitField) and (not FDownloadQueue.AsBitfield);
+      Assert(want.Len = FBitField.Len);
+    end else
+    if not weLoad then
+      (FCounter as IMutableCounter).ResetSpeed; { сброс показаний скорости }
 
     for peer in FPeers do
       if not peer.Busy then
       begin
         { соединение (хендшейк пройден) установлено успешно и у нас есть метаданные }
-        if peer.Connected and haveMD then
+        if peer.ConnectionEstablished and haveMD then
         begin
           { мы чето качаем }
           if weLoad then
           begin
+            { оптимизация: если не выставлен ни один бит в want, значит мы не качаем }
             { он нам интересен, просим нас раздушить }
-            if not (pfWeInterested in peer.Flags) and
-                   (peer.Bitfield.Len > 0) and
-                   (TBitField(want and peer.Bitfield).CheckedCount > 0) then
+            if (want.CheckedCount > 0) and
+               ([pfWeInterested] * peer.Flags = []) and
+               (peer.Bitfield.Len > 0) and
+               (TBitField(want and peer.Bitfield).CheckedCount > 0) then
               peer.Interested;
 
-            Assert(Assigned(FDownloadQueue));
             FDownloadQueue.Timeout; { проверка таймаута }
 
             { мы не зачоканы -- он готов нам отдавать }
-            if (not (pfTheyChoke in peer.Flags)) and FDownloadQueue.CanEnqueue(peer) then
-            begin
-              FPiecePicker.PickPiece(peer, FPeers, want,
-                procedure (APieceIndex: Integer)
-                var
-                  offset, size, len: Integer;
-                begin
-                  FDownloadQueue.Enqueue(APieceIndex, peer);
+            if (want.CheckedCount > 0) and ([pfTheyChoke] * peer.Flags = []) and
+                FDownloadQueue.CanEnqueue(peer) then
+              for pieceIdx in FPiecePicker.Fetch(peer.Bitfield, FPeersHave, want) do
+              begin
+                {$IFDEF DEBUG}
+                DebugOutput('fetch ' + pieceIdx.ToString);
+                {$ENDIF}
+                FDownloadQueue.Enqueue(pieceIdx, peer);
 
-                  offset:= 0;
-                  size  := FMetafile.PieceLength[APieceIndex];
-
-                  while size > 0 do
+                TPiece.EnumBlocks(FMetafile.PieceLength[pieceIdx],
+                  procedure (AOffset, ALength: Integer)
                   begin
-                    len := Min(TPiece.BlockLength, size);
-                    peer.Request(APieceIndex, offset, len);
-
-                    Inc(offset, len);
-                    Dec(size  , len);
-                  end;
-                end);
-            end;
-
-            alive := True;
+                    peer.Request(pieceIdx, AOffset, ALength);
+                  end);
+              end;
           end;
-          { раздаем, если есть что }
-          FUploadQueue.Dequeue(peer, procedure (APeer: IPeer; APiece, AOffset, ASize: Integer)
-          var
-            p: IPiece;
-            data: TUniString;
-          begin
-            data.Len := 0;
+          { отвечаем на запросы }
+          alive := FUploadQueue.Dequeue(peer,
+            procedure (APeer: IPeer; APiece, AOffset, ASize: Integer)
+            var
+              p: IPiece;
+              d: TUniString;
+            begin
+              try
+                p := FFileSystem.Piece[APiece];
+                Assert(Assigned(p));
 
-            p := FFileSystem.Piece[APiece];
-            Assert(Assigned(p));
+                d.Assign(p.Data);
+                Assert(not d.Empty);
+              except
+                on E: Exception do
+                begin
+                  MarkAsError;
+                  raise;
+                end;
+              end;
 
-            data := p.Data.Copy(AOffset, ASize);
-
-            APeer.SendPiece(APiece, AOffset, data);
-            //DebugOutput(Format('send piece=%d offset=%d size=%d', [APiece, AOffset, ASize]));
-
-            alive := True;
-          end);
+              APeer.SendPiece(APiece, AOffset, d.Copy(AOffset, ASize));
+            end) or weLoad or alive;
         end;
 
-        { здесь нужно проверять всякие рейтинги и т.д.
-          Если с нас запрашивают больше, чем отдают -- душим }
-        peer.Sync;
+        { отключаемся от пиров, к которым МЫ подключились, если загрузка завершена
+          и пир в нас не заинтересован }
+        if (not weLoad) and (peer.ConnectionType = ctOutgoing) and not (pfTheyInterested in peer.Flags) then
+        begin
+          {$IFDEF DEBUG}
+          DebugOutput('disconnect ' + peer.Host);
+          {$ENDIF}
+
+          peer.Disconnect;
+          Break;
+        end else
+        begin
+          (*
+          // если мы качаем и с нас скачивают больше, чем отдают -- душим
+          // а когда снимать удушение?
+          if (not weLoad) and (peer.Rate < MinPeerRate) then
+          begin
+            FUploadQueue.CancelRequests(peer);
+            peer.Choke;
+          end;
+          *)
+
+          { sync! }
+          peer.Sync;
+        end;
       end;
 
-    if haveMD then
+    t := Now;
+
+    if haveMD and (SecondsBetween(t, FLastCacheClear) >= CacheClearInterval) then
+    begin
       FFileSystem.ClearCaches;
+      FLastCacheClear := t;
+    end;
 
     if alive then
       Touch
     else
-    if MinutesBetween(UtcNow, FLastRequest) >= MaxIdleTime then
-      { ничего не качаем и ничего не раздаем -- переводим раздачу в пассивный режим }
+    if SecondsBetween(t, FLastRequest) >= MaxIdleTime then
+    begin
+      { ничего не качаем и ничего не раздаем -- переводим раздачу в пассивный режим, отключаемся от пиров }
       FStates := FStates - [ssActive];
+
+      DisconnectAllPeers;
+
+      FPeers.Clear;
+    end;
   finally
     Unlock;
   end;
@@ -769,16 +1168,31 @@ begin
   System.TMonitor.Exit(FLock);
 end;
 
+procedure TSeeding.Update;
+begin
+  if Assigned(FOnUpdate) then
+    FOnUpdate(Self);
+end;
+
+procedure TSeeding.UpdateCounter(APeer: IPeer; ADown, AUpl: UInt64);
+begin
+  (FCounter as IMutableCounter).Add(ADown, AUpl);
+
+  if Assigned(FOnUpdateCounter) then
+    FOnUpdateCounter(Self, ADown, AUpl);
+end;
+
 { TSeeding.TDownloadPieceQueue }
 
 constructor TSeeding.TDownloadPieceQueue.Create(APieceCount: Integer;
-  AOnTimeout: TProc<Integer, IPeer>);
+  AOnTimeout, AOnCancel: TProc<Integer, IPeer>);
 begin
   inherited Create;
 
   FList       := System.Generics.Collections.TList<TDownloadPieceQueueItem>.Create;
   FBitField   := TBitfield.Create(APieceCount);
   FOnTimeout  := AOnTimeout;
+  FOnCancel   := AOnCancel;
 end;
 
 procedure TSeeding.TDownloadPieceQueue.Dequeue(APiece: Integer);
@@ -802,7 +1216,6 @@ end;
 
 procedure TSeeding.TDownloadPieceQueue.Enqueue(APiece: Integer; APeer: IPeer);
 begin
-  Assert(CanEnqueue(APeer));
   FList.Add(TDownloadPieceQueueItem.Create(APeer, APiece));
   FBitField[APiece] := True;
 end;
@@ -812,6 +1225,20 @@ begin
   Result := FBitField;
 end;
 
+procedure TSeeding.TDownloadPieceQueue.CancelRequest(APeer: IPeer; APieceIndex,
+  AOffset: Integer);
+var
+  i: Integer;
+begin
+  for i := FList.Count - 1 downto 0 do
+    with FList[i] do
+      if (Piece = APieceIndex) and (Peer.HashCode = APeer.HashCode) then
+      begin
+        FBitField[Piece] := False;
+        FList.Delete(i);
+      end;
+end;
+
 procedure TSeeding.TDownloadPieceQueue.CancelRequests(APeer: IPeer);
 var
   i: Integer;
@@ -819,7 +1246,13 @@ begin
   for i := FList.Count - 1 downto 0 do
     with FList[i] do
       if Peer.HashCode = APeer.HashCode then
+      begin
+        FBitField[Piece] := False;
         FList.Delete(i);
+
+        if Assigned(FOnCancel) then
+          FOnCancel(Piece, APeer);
+      end;
 end;
 
 function TSeeding.TDownloadPieceQueue.CanEnqueue(APeer: IPeer): Boolean;
@@ -847,9 +1280,12 @@ end;
 procedure TSeeding.TDownloadPieceQueue.Timeout;
 var
   it: TDownloadPieceQueueItem;
+  t: TDateTime;
 begin
+  t := Now;
+
   for it in FList do
-    if SecondsBetween(UtcNow, it.TimeStamp) > MaxPieceQueueTimeout then
+    if SecondsBetween(t, it.TimeStamp) > MaxPieceQueueTimeout then
     begin
       FList.Remove(it);
       FBitField[it.Piece] := False;
@@ -869,7 +1305,7 @@ begin
     if it.Piece = APiece then
     begin
       it2 := it;
-      it2.TimeStamp := UtcNow;
+      it2.TimeStamp := Now;
 
       FList.Remove(it);
       FList.Add(it2);
@@ -885,19 +1321,48 @@ constructor TSeeding.TDownloadPieceQueue.TDownloadPieceQueueItem.Create(
 begin
   Peer := APeer;
   Piece := APiece;
-  TimeStamp := UtcNow;
+  TimeStamp := Now;
 end;
 
 { TSeeding.TUploadPieceQueue }
+
+procedure TSeeding.TUploadPieceQueue.CancelRequest(APeer: IPeer; APieceIndex,
+  AOffset: Integer);
+var
+  i: Integer;
+begin
+  for i := FList.Count - 1 downto 0 do
+    with FList[i] do
+      if (Piece = APieceIndex) and (Offset = AOffset) and (Peer.HashCode = APeer.HashCode) then
+        FList.Delete(i);
+end;
 
 procedure TSeeding.TUploadPieceQueue.CancelRequests(APeer: IPeer);
 var
   i: Integer;
 begin
-  for i := FList.Count downto 0 do
+  for i := FList.Count - 1 downto 0 do
     with FList[i] do
       if Peer.HashCode = APeer.HashCode then
         FList.Delete(i);
+end;
+
+function TSeeding.TUploadPieceQueue.CanEnqueue(APiece, AOffset, ASize: Integer;
+  APeer: IPeer): Boolean;
+var
+  it: TUploadPieceQueueItem;
+begin
+  Assert(Assigned(APeer));
+
+  for it in FList do
+    with it do
+    if (Piece         = APiece  ) and
+       (Offset        = AOffset ) and
+       (Size          = ASize   ) and
+       (Peer.HashCode = APeer.HashCode) then
+      Exit(False);
+
+  Result := True;
 end;
 
 constructor TSeeding.TUploadPieceQueue.Create;
@@ -906,12 +1371,14 @@ begin
   FList := TList<TUploadPieceQueueItem>.Create;
 end;
 
-procedure TSeeding.TUploadPieceQueue.Dequeue(APeer: IPeer;
-  ADequeueProc: TProc<IPeer, Integer, Integer, Integer>);
+function TSeeding.TUploadPieceQueue.Dequeue(APeer: IPeer;
+  ADequeueProc: TProc<IPeer, Integer, Integer, Integer>): Boolean;
 var
+  i, j, k: Integer;
   it: TUploadPieceQueueItem;
-  i, j: Integer;
 begin
+  Result := False;
+
   if GetIsEmpty then
     Exit;
 
@@ -919,21 +1386,24 @@ begin
 
   i := 0;
   j := -1;
-  while i < FList.Count do
+  k := 0;
+
+  while (not GetIsEmpty) and (i < FList.Count) and (k < MaxPieceRequestCount) do
   begin
-    { отдаем ему кусок целиком }
     it := FList[i];
 
-    if (it.Peer.HashCode = APeer.HashCode) and ((j = -1) or (j = it.Piece)) then
+    if ((j = -1) or (j = it.Piece)) and (it.Peer.HashCode = APeer.HashCode) then
     begin
       j := it.Piece;
 
-      ADequeueProc(it.Peer, it.Piece, it.Offset, it.Size);
+      ADequeueProc(APeer, it.Piece, it.Offset, it.Size);
       FList.Delete(i);
+      Inc(k);
+
+      Result := True;
     end else
       Inc(i);
   end;
-
 end;
 
 destructor TSeeding.TUploadPieceQueue.Destroy;
@@ -950,16 +1420,8 @@ end;
 
 function TSeeding.TUploadPieceQueue.GetIsEmpty: Boolean;
 begin
+  Assert(FList.Count >= 0);
   Result := FList.Count = 0;
-end;
-
-procedure TSeeding.TUploadPieceQueue.Reject(APeer: IPeer);
-var
-  i: Integer;
-begin
-  for i := FList.Count - 1 downto 0 do
-    if FList[i].Peer.HashCode = APeer.HashCode then
-      FList.Delete(i);
 end;
 
 { TSeeding.TUploadPieceQueue.TUploadPieceQueueItem }

@@ -52,6 +52,7 @@ var
   buf: TIdBytes;
 begin
   ReadBytes(buf, ALen);
+  Assert(Length(buf) = ALen);
 end;
 
 procedure TIdIOHandlerHelper.WriteByte(AValue: Byte);

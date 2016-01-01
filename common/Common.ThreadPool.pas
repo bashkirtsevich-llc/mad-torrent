@@ -1,11 +1,11 @@
-unit ThreadPool;
+unit Common.ThreadPool;
 
 interface
 
 uses
   System.SysUtils, System.DateUtils,
   System.Generics.Collections, System.Generics.Defaults,
-  AccurateTimer,
+  Common.AccurateTimer,
   IdYarn, IdTask, IdSchedulerOfThreadPool, IdSchedulerOfThread;
 
 type
@@ -69,7 +69,7 @@ type
 
     function NewJob: TJob; inline;
 
-    procedure WaitForFreeThreads; { ждать до первого свободного треда }
+    procedure WaitForFreeThreads; inline; { ждать до первого свободного треда }
   public
     procedure Exec(AOnRun: TFunc<Boolean {Reloop}>); overload; { если результат ложный, то завершаем цикл }
     procedure Exec(AOnRun: TFunc<Boolean>; AOnExcept: TProc<Exception>); overload;
@@ -84,7 +84,7 @@ type
 
     //property Pool: TIdSchedulerOfThreadPool read FPool;
 
-    constructor Create(AMaxThreads: Integer = 100; APoolSize: Integer = 50);
+    constructor Create(AMaxThreads: Integer = 0; APoolSize: Integer = 100);
     destructor Destroy; override;
   end;
 
@@ -204,12 +204,15 @@ end;
 
 procedure TThreadPool.WaitForFreeThreads;
 begin
-  Lock;
-  try
-    while FPool.ActiveYarns.Count > FPool.MaxThreads do
-      DelayMicSec(100);
-  finally
-    Unlock;
+  if FPool.MaxThreads <> 0 then
+  begin
+    Lock;
+    try
+      while FPool.ActiveYarns.Count > FPool.MaxThreads do
+        DelayMicSec(100);
+    finally
+      Unlock;
+    end;
   end;
 end;
 
@@ -336,7 +339,7 @@ constructor TThreadPool.TJob.Create(AOwner: TThreadPool);
 begin
   FOwner := AOwner;
 
-  FYarn := AOwner.FPool.AcquireYarn;
+  FYarn := FOwner.FPool.AcquireYarn;
 
   Assert(Assigned(FYarn));
   Assert(Assigned(TIdYarnOfThread(FYarn).Thread));
@@ -364,8 +367,6 @@ begin
       Free;
     end, nil {on except}
   );
-
-  Assert(Assigned(TIdYarnOfThread(FYarn).Thread));
 end;
 
 destructor TThreadPool.TJob.Destroy;

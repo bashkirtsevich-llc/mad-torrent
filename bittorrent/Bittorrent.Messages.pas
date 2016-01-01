@@ -3,9 +3,9 @@
 interface
 
 uses
-  System.SysUtils,
-  System.Generics.Defaults,
-  Spring.Collections,
+  System.SysUtils, System.Math, System.Generics.Collections,
+  System.Generics.Defaults, System.Hash,
+  Common.SHA1,
   Bittorrent, Bittorrent.Bitfield, Basic.UniString,
   IdIOHandler, IdIOHandlerHelper, IdGlobal;
 
@@ -14,9 +14,11 @@ type
   private
     procedure Send(AIOHandler: TIdIOHandler); inline;
   protected
+    function GetMsgSize: Integer; virtual; abstract;
+
     procedure ReadFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer); virtual; abstract;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); virtual; abstract;
-  public
+
     constructor CreateFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer);
   end;
 
@@ -24,41 +26,43 @@ type
 
   TFixedMessage = class abstract(TMessage, IFixedMessage)
   private
-//    function GetPayloadSize: Integer; inline;
-    function GetMessageID: TFixedMessageID; inline;
+    function GetMessageID: TMessageID; inline;
   protected
+    function GetMsgSize: Integer; override;
     function MessageLen: Integer; virtual;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); override;
   protected
-    class function ClassMessageID: TFixedMessageID; virtual; abstract;
+    class function ClassMessageID: TMessageID; virtual; abstract;
   public
-    class function ParseMessage(AIOHandler: TIdIOHandler): IMessage; static;
+    class function ParseMessage(AIOHandler: TIdIOHandler;
+      AHandshake: Boolean): IMessage; static;
   end;
 
   { класс-затычка, перекрывающая абстрактный метод ReadFromIOHandler }
   TAtomicMessage = class abstract(TFixedMessage)
   protected
-    procedure ReadFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer); override;
+    procedure ReadFromIOHandler(AIOHandler: TIdIOHandler;
+      AMsgSize: Integer); override; final;
   end;
 
   TChokeMessage = class(TAtomicMessage, IChokeMessage)
   protected
-    class function ClassMessageID: TFixedMessageID; override;
+    class function ClassMessageID: TMessageID; override; final;
   end;
 
   TUnchokeMessage = class(TAtomicMessage, IUnchokeMessage)
   protected
-    class function ClassMessageID: TFixedMessageID; override;
+    class function ClassMessageID: TMessageID; override; final;
   end;
 
   TInterestedMessage = class(TAtomicMessage, IInterestedMessage)
   protected
-    class function ClassMessageID: TFixedMessageID; override;
+    class function ClassMessageID: TMessageID; override; final;
   end;
 
   TNotInterestedMessage = class(TAtomicMessage, INotInterestedMessage)
   protected
-    class function ClassMessageID: TFixedMessageID; override;
+    class function ClassMessageID: TMessageID; override; final;
   end;
 
   THaveMessage = class(TFixedMessage, IHaveMessage)
@@ -70,7 +74,7 @@ type
     procedure ReadFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer); override;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); override;
   protected
-    class function ClassMessageID: TFixedMessageID; override;
+    class function ClassMessageID: TMessageID; override; final;
   public
     constructor Create(APieceIndex: Integer);
   end;
@@ -78,15 +82,15 @@ type
   TBitfieldMessage = class(TFixedMessage, IBitfieldMessage)
   private
     FBitfield: TBitField;
-    function GetBits: TBitField; inline;
+    function GetBitField: TBitField; inline;
   protected
     function MessageLen: Integer; override;
     procedure ReadFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer); override;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); override;
   protected
-    class function ClassMessageID: TFixedMessageID; override;
+    class function ClassMessageID: TMessageID; override; final;
   public
-    constructor Create(const ABits: TBitField);
+    constructor Create(const ABitfield: TBitField);
   end;
 
   TRequestMessage = class(TFixedMessage, IRequestMessage)
@@ -103,7 +107,7 @@ type
     procedure ReadFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer); override;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); override;
   protected
-    class function ClassMessageID: TFixedMessageID; override;
+    class function ClassMessageID: TMessageID; override; final;
   public
     constructor Create(APieceIndex, AOffset, ASize: Integer);
   end;
@@ -122,7 +126,7 @@ type
     procedure ReadFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer); override;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); override;
   protected
-    class function ClassMessageID: TFixedMessageID; override;
+    class function ClassMessageID: TMessageID; override; final;
   public
     constructor Create(APieceIndex, AOffset: Integer; ABlock: TUniString);
   end;
@@ -141,7 +145,7 @@ type
     procedure ReadFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer); override;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); override;
   protected
-    class function ClassMessageID: TFixedMessageID; override;
+    class function ClassMessageID: TMessageID; override; final;
   public
     constructor Create(APieceIndex, AOffset, ASize: Integer);
   end;
@@ -155,7 +159,7 @@ type
     procedure ReadFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer); override;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); override;
   protected
-    class function ClassMessageID: TFixedMessageID; override;
+    class function ClassMessageID: TMessageID; override; final;
   public
     constructor Create(APort: TIdPort);
   end;
@@ -168,17 +172,17 @@ type
     FMessageID: Byte;
     FMessageData: TUniString;
     FExtendedMsg: IExtension;
-    function GetExtension: IExtension; inline;
+    function GetExtension: IExtension;
     function GetMessageID: Byte; inline;
   protected
     function MessageLen: Integer; override;
     procedure ReadFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer); override;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); override;
   protected
-    class function ClassMessageID: TFixedMessageID; override;
+    class function ClassMessageID: TMessageID; override; final;
   public
     constructor Create(AMessageID: Byte; AExtendedMsgData: TUniString); overload;
-    constructor Create(ASupportsDict: IDictionary<string, Byte>; AExtendedMsg: IExtension); overload;
+    constructor Create(ASupportsDict: TDictionary<string, Byte>; AExtendedMsg: IExtension); overload;
   end;
 
   TKeepAliveMessage = class(TMessage, IKeepAliveMessage)
@@ -186,6 +190,7 @@ type
     FDmmy: TUniString;
     function GetDummy: TUniString; inline;
   protected
+    function GetMsgSize: Integer; override;
     procedure ReadFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer); override;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); override;
   end;
@@ -194,7 +199,7 @@ type
   private
     const
       ProtocolIdentifier = 'BitTorrent protocol';
-
+      PeerIDLen = 20;
       {$REGION 'Flags'}
       FlagsLen                = 8;
 
@@ -220,6 +225,7 @@ type
     function GetSupportsExtendedMessaging: Boolean; inline;
     function GetSupportsFastPeer: Boolean; inline;
   protected
+    function GetMsgSize: Integer; override;
     procedure ReadFromIOHandler(AIOHandler: TIdIOHandler; AMsgSize: Integer); override;
     procedure WriteToIOHandler(AIOHandler: TIdIOHandler); override;
   public
@@ -253,24 +259,114 @@ begin
   end;
 end;
 
+{ TFixedMessage }
+
+function TFixedMessage.GetMessageID: TMessageID;
+begin
+  Result := ClassMessageID;
+end;
+
+function TFixedMessage.GetMsgSize: Integer;
+begin
+  Result := MessageLen;
+end;
+
+function TFixedMessage.MessageLen: Integer;
+begin
+  Result := SizeOf(TMessageID) {1};
+end;
+
+class function TFixedMessage.ParseMessage(AIOHandler: TIdIOHandler;
+  AHandshake: Boolean): IMessage;
+const
+  msgClasses: array[TMessageID] of TFixedMessagesClass = (
+    {idChoke}         TChokeMessage,
+    {idUnchoke}       TUnchokeMessage,
+    {idInterested}    TInterestedMessage,
+    {idNotInterested} TNotInterestedMessage,
+    {idHave}          THaveMessage,
+    {idBitfield}      TBitfieldMessage,
+    {idRequest}       TRequestMessage,
+    {idPiece}         TPieceMessage,
+    {idCancel}        TCancelMessage,
+    {idPort}          TPortMessage,
+    {idExtended}      TExtensionMessage
+  );
+
+var
+  msgLen: Cardinal;
+begin
+  if AHandshake then
+    Result := THandshakeMessage.CreateFromIOHandler(AIOHandler)
+  else
+  with AIOHandler do
+  begin
+    msgLen := ReadInt32; { читаем длину }
+
+    if msgLen > 0 then
+      Result := msgClasses[TMessageID.Parse(ReadByte)].CreateFromIOHandler(AIOHandler, msgLen - 1)
+    else
+      Result := TKeepAliveMessage.CreateFromIOHandler(AIOHandler, msgLen);
+  end;
+end;
+
+procedure TFixedMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
+begin
+  with AIOHandler do
+  begin
+    WriteCardinal(MessageLen);
+    WriteByte(Byte(ClassMessageID));
+  end;
+end;
+
+{ TAtomicMessage }
+
+procedure TAtomicMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
+  AMsgSize: Integer);
+begin
+  { nope }
+end;
+
 { TChokeMessage }
 
-class function TChokeMessage.ClassMessageID: TFixedMessageID;
+class function TChokeMessage.ClassMessageID: TMessageID;
 begin
   Result := idChoke;
 end;
 
+{ TUnchokeMessage }
+
+class function TUnchokeMessage.ClassMessageID: TMessageID;
+begin
+  Result := idUnchoke;
+end;
+
+{ TInterestedMessage }
+
+class function TInterestedMessage.ClassMessageID: TMessageID;
+begin
+  Result := idInterested;
+end;
+
+{ TNotInterestedMessage }
+
+class function TNotInterestedMessage.ClassMessageID: TMessageID;
+begin
+  Result := idNotInterested;
+end;
+
 { THaveMessage }
+
+class function THaveMessage.ClassMessageID: TMessageID;
+begin
+  Result := idHave;
+end;
 
 constructor THaveMessage.Create(APieceIndex: Integer);
 begin
   inherited Create;
-  FPieceIndex := APieceIndex;
-end;
 
-class function THaveMessage.ClassMessageID: TFixedMessageID;
-begin
-  Result := idHave;
+  FPieceIndex := APieceIndex;
 end;
 
 function THaveMessage.GetPieceIndex: Integer;
@@ -280,15 +376,14 @@ end;
 
 function THaveMessage.MessageLen: Integer;
 begin
-  Result := inherited MessageLen;
-  Result := Result + FPieceIndex.Size;
+  Result := (inherited MessageLen) + FPieceIndex.Size;
 end;
 
 procedure THaveMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
   AMsgSize: Integer);
 begin
   Assert(AMsgSize = 4);
-  FPieceIndex := AIOHandler.ReadLongWord;
+  FPieceIndex := AIOHandler.ReadUInt32;
 end;
 
 procedure THaveMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
@@ -299,26 +394,25 @@ end;
 
 { TBitfieldMessage }
 
-class function TBitfieldMessage.ClassMessageID: TFixedMessageID;
+class function TBitfieldMessage.ClassMessageID: TMessageID;
 begin
   Result := idBitfield;
 end;
 
-constructor TBitfieldMessage.Create(const ABits: TBitField);
+constructor TBitfieldMessage.Create(const ABitfield: TBitField);
 begin
   inherited Create;
-  FBitfield := ABits;
+  FBitfield := ABitfield;
 end;
 
-function TBitfieldMessage.GetBits: TBitField;
+function TBitfieldMessage.GetBitField: TBitField;
 begin
   Result := FBitfield;
 end;
 
 function TBitfieldMessage.MessageLen: Integer;
 begin
-  Result := inherited MessageLen;
-  Result := Result + FBitfield.LengthInBytes;
+  Result := (inherited MessageLen) + FBitfield.LengthInBytes;
 end;
 
 procedure TBitfieldMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
@@ -326,8 +420,6 @@ procedure TBitfieldMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
 var
   buf: TUniString;
 begin
-  //AIOHandler.ReadBytes(buf, AMsgSize);
-  //FBitfield := FBitfield.FromUniString(buf);
   AIOHandler.ReadUniString(AMsgSize, buf);
   FBitfield := FBitfield.FromUniString(buf);
 end;
@@ -338,7 +430,7 @@ begin
   AIOHandler.WriteUniString(FBitfield.AsUniString);
 end;
 
-{ TRequestMessage }
+{ TBTRequestMessage }
 
 constructor TRequestMessage.Create(APieceIndex, AOffset, ASize: Integer);
 begin
@@ -349,7 +441,7 @@ begin
   FSize := ASize;
 end;
 
-class function TRequestMessage.ClassMessageID: TFixedMessageID;
+class function TRequestMessage.ClassMessageID: TMessageID;
 begin
   Result := idRequest;
 end;
@@ -371,8 +463,7 @@ end;
 
 function TRequestMessage.MessageLen: Integer;
 begin
-  Result := inherited MessageLen;
-  Result := Result + FPieceIndex.Size + FOffset.Size + FSize.Size;
+  Result := (inherited MessageLen) + FPieceIndex.Size + FOffset.Size + FSize.Size;
 end;
 
 procedure TRequestMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
@@ -380,9 +471,9 @@ procedure TRequestMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
 begin
   with AIOHandler do
   begin
-    FPieceIndex := ReadLongInt;
-    FOffset     := ReadLongInt;
-    FSize       := ReadLongInt;
+    FPieceIndex := ReadInt32;
+    FOffset     := ReadInt32;
+    FSize       := ReadInt32;
   end;
 end;
 
@@ -390,7 +481,6 @@ procedure TRequestMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
 begin
   inherited WriteToIOHandler(AIOHandler);
 
-//  DebugOutput(PChar('отправлен запрос куска #'+FPieceIndex.ToString));
   AIOHandler.Write(FPieceIndex);
   AIOHandler.Write(FOffset);
   AIOHandler.Write(FSize);
@@ -402,12 +492,13 @@ constructor TPieceMessage.Create(APieceIndex, AOffset: Integer;
   ABlock: TUniString);
 begin
   inherited Create;
+
   FPieceIndex := APieceIndex;
   FOffset := AOffset;
   FBlock.Assign(ABlock);
 end;
 
-class function TPieceMessage.ClassMessageID: TFixedMessageID;
+class function TPieceMessage.ClassMessageID: TMessageID;
 begin
   Result := idPiece;
 end;
@@ -429,27 +520,18 @@ end;
 
 function TPieceMessage.MessageLen: Integer;
 begin
-  Result := inherited MessageLen;
-
-  Result := Result + FPieceIndex.Size + FOffset.Size + FBlock.Len;
+  Result := (inherited MessageLen) + FPieceIndex.Size + FOffset.Size + FBlock.Len;
 end;
 
 procedure TPieceMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
   AMsgSize: Integer);
-//var
-//  buf: TIdBytes;
 begin
-  FPieceIndex := AIOHandler.ReadLongWord;
-  FOffset := AIOHandler.ReadLongWord;
-
-//  AIOHandler.ReadBytes(buf, AMsgSize - FPieceIndex.Size - FOffset.Size);
-//  FBlock := buf;
+  FPieceIndex := AIOHandler.ReadUInt32;
+  FOffset := AIOHandler.ReadUInt32;
   AIOHandler.ReadUniString(AMsgSize - FPieceIndex.Size - FOffset.Size, FBlock);
 end;
 
 procedure TPieceMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
-//var
-//  b: TIdBytes;
 begin
   inherited WriteToIOHandler(AIOHandler);
 
@@ -457,12 +539,6 @@ begin
   begin
     Write(FPieceIndex);
     Write(FOffset);
-
-//    { FIXME: FBlock неявно преобразуется в строку и при отправке данных в сеть, получается херня }
-//    SetLength(b, FBlock.Len);
-//    Move(FBlock.DataPtr[0]^, b[0], FBlock.Len);
-//
-//    Write(b);
     WriteUniString(FBlock);
   end;
 end;
@@ -472,12 +548,13 @@ end;
 constructor TCancelMessage.Create(APieceIndex, AOffset, ASize: Integer);
 begin
   inherited Create;
+
   FPieceIndex := APieceIndex;
   FOffset := AOffset;
   FSize := ASize;
 end;
 
-class function TCancelMessage.ClassMessageID: TFixedMessageID;
+class function TCancelMessage.ClassMessageID: TMessageID;
 begin
   Result := idCancel;
 end;
@@ -499,16 +576,15 @@ end;
 
 function TCancelMessage.MessageLen: Integer;
 begin
-  Result := inherited MessageLen;
-  Result := Result + FPieceIndex.Size + FOffset.Size + FSize.Size;
+  Result := (inherited MessageLen) + FPieceIndex.Size + FOffset.Size + FSize.Size;
 end;
 
 procedure TCancelMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
   AMsgSize: Integer);
 begin
-  FPieceIndex := AIOHandler.ReadLongWord;
-  FOffset     := AIOHandler.ReadLongWord;
-  FSize       := AIOHandler.ReadLongWord;
+  FPieceIndex := AIOHandler.ReadUInt32;
+  FOffset     := AIOHandler.ReadUInt32;
+  FSize       := AIOHandler.ReadUInt32;
 end;
 
 procedure TCancelMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
@@ -528,7 +604,7 @@ begin
   FPort := APort;
 end;
 
-class function TPortMessage.ClassMessageID: TFixedMessageID;
+class function TPortMessage.ClassMessageID: TMessageID;
 begin
   Result := idPort;
 end;
@@ -540,15 +616,14 @@ end;
 
 function TPortMessage.MessageLen: Integer;
 begin
-  Result := inherited MessageLen;
-  Result := Result + FPort.Size;
+  Result := (inherited MessageLen) + FPort.Size;
 end;
 
 procedure TPortMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
   AMsgSize: Integer);
 begin
   Assert(AMsgSize = 2);
-  FPort := AIOHandler.ReadWord;
+  FPort := AIOHandler.ReadUInt16;
 end;
 
 procedure TPortMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
@@ -556,6 +631,106 @@ begin
   inherited WriteToIOHandler(AIOHandler);
 
   AIOHandler.WriteWord(FPort);
+end;
+
+{ TExtensionMessage }
+
+class function TExtensionMessage.ClassMessageID: TMessageID;
+begin
+  Result := idExtended;
+end;
+
+constructor TExtensionMessage.Create(AMessageID: Byte;
+  AExtendedMsgData: TUniString);
+begin
+  inherited Create;
+
+  FMessageID := AMessageID;
+  FMessageData.Assign(AExtendedMsgData);
+end;
+
+constructor TExtensionMessage.Create(ASupportsDict: TDictionary<string, Byte>;
+  AExtendedMsg: IExtension);
+begin
+  inherited Create;
+
+  if Supports(AExtendedMsg, IExtensionHandshake) then
+    FMessageID := HandshakeMsgID
+  else
+  begin
+    Assert(Assigned(ASupportsDict));
+    Assert(ASupportsDict.ContainsKey(AExtendedMsg.SupportName));
+
+    FMessageID := ASupportsDict[AExtendedMsg.SupportName];
+  end;
+  FExtendedMsg := AExtendedMsg;
+end;
+
+function TExtensionMessage.GetExtension: IExtension;
+var
+  i: Integer;
+begin
+  if not Assigned(FExtendedMsg) then
+  begin
+    if FMessageID = HandshakeMsgID then
+      FExtendedMsg := TExtensionHandshake.Create(FMessageData)
+    else
+    for i := 0 to TExtension.SupportsList.Count - 1 do
+    begin
+      if i + 1 = FMessageID then
+        FExtendedMsg := TExtension.SupportsList[i].Value.Create(FMessageData);
+    end;
+  end;
+
+  Result := FExtendedMsg;
+end;
+
+function TExtensionMessage.GetMessageID: Byte;
+begin
+  Result := FMessageID;
+end;
+
+function TExtensionMessage.MessageLen: Integer;
+begin
+  Result := (inherited MessageLen) + SizeOf(FMessageID) + GetExtension.Size;
+end;
+
+procedure TExtensionMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
+  AMsgSize: Integer);
+begin
+  FMessageID := AIOHandler.ReadByte;
+  AIOHandler.ReadUniString(AMsgSize - 1, FMessageData);
+end;
+
+procedure TExtensionMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
+begin
+  inherited WriteToIOHandler(AIOHandler);
+
+  AIOHandler.WriteByte(FMessageID);
+  AIOHandler.WriteUniString(FExtendedMsg.Data);
+end;
+
+{ TKeepAliveMessage }
+
+function TKeepAliveMessage.GetDummy: TUniString;
+begin
+  Result := FDmmy;
+end;
+
+function TKeepAliveMessage.GetMsgSize: Integer;
+begin
+  Result := Byte.Size;
+end;
+
+procedure TKeepAliveMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
+  AMsgSize: Integer);
+begin
+  AIOHandler.ReadUniString(AMsgSize, FDmmy);
+end;
+
+procedure TKeepAliveMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
+begin
+  { nope }
 end;
 
 { THandshakeMessage }
@@ -596,6 +771,16 @@ begin
   Result := FInfoHash;
 end;
 
+function THandshakeMessage.GetMsgSize: Integer;
+begin
+  Result :=
+    Byte.Size +
+    ProtocolIdentifier.Length +
+    FFlags.Len +
+    FInfoHash.Len +
+    FPeerID.Len;
+end;
+
 function THandshakeMessage.GetPeerID: TUniString;
 begin
   Result := FPeerID;
@@ -620,30 +805,20 @@ procedure THandshakeMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
   AMsgSize: Integer);
 var
   i: Integer;
-  //buf1, buf2, buf3: TIdBytes;
   proto: string;
 begin
   with AIOHandler do
   begin
     { проверки правильности заполнения протокола }
     i := ReadByte;
-    Assert(i = Length(ProtocolIdentifier));
+    Assert(i = ProtocolIdentifier.Length);
 
     proto := ReadString(i);
     Assert(proto = ProtocolIdentifier);
-
     { достаем данные клиента }
-//    ReadBytes(buf1, FlagsLen);
-//    FFlags := buf1;
     ReadUniString(FlagsLen, FFlags);
-
-//    ReadBytes(buf2, 20);
-//    FInfoHash := buf2;
-    ReadUniString(20, FInfoHash);
-
-//    ReadBytes(buf3, 20);
-//    FPeerID := buf3;
-    ReadUniString(20, FPeerID);
+    ReadUniString(SHA1HashLen, FInfoHash);
+    ReadUniString(PeerIDLen, FPeerID);
   end;
 end;
 
@@ -651,7 +826,7 @@ procedure THandshakeMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
 begin
   with AIOHandler do
   begin
-    WriteByte(Length(ProtocolIdentifier));
+    WriteByte(ProtocolIdentifier.Length);
     WriteString(ProtocolIdentifier);
     WriteUniString(FFlags);
     WriteUniString(FInfoHash);
@@ -659,199 +834,5 @@ begin
   end;
 end;
 
-{ TFixedMessage }
-
-function TFixedMessage.GetMessageID: TFixedMessageID;
-begin
-  Result := ClassMessageID;
-end;
-
-//function TFixedMessage.GetPayloadSize: Integer;
-//begin
-//  Result := MessageLen;
-//end;
-
-function TFixedMessage.MessageLen: Integer;
-begin
-  Result := SizeOf(TFixedMessageID) {1};
-end;
-
-class function TFixedMessage.ParseMessage(AIOHandler: TIdIOHandler): IMessage;
-var
-  id: TFixedMessageID;
-  msgLen: Cardinal;
-  msgClass: TFixedMessagesClass;
-begin
-  with AIOHandler do
-  begin
-    msgLen := ReadLongInt; { читаем длину }
-
-    if msgLen > 0 then
-    begin
-      id := TFixedMessageID(ReadByte); { читаем id сообщения }
-      msgClass := nil;
-
-      case id of
-        idChoke         : msgClass := TChokeMessage;
-        idUnchoke       : msgClass := TUnchokeMessage;
-        idInterested    : msgClass := TInterestedMessage;
-        idNotInterested : msgClass := TNotInterestedMessage;
-        idHave          : msgClass := THaveMessage;
-        idBitfield      : msgClass := TBitfieldMessage;
-        idRequest       : msgClass := TRequestMessage;
-        idPiece         : msgClass := TPieceMessage;
-        idCancel        : msgClass := TCancelMessage;
-        idPort          : msgClass := TPortMessage;
-        idExtended      : msgClass := TExtensionMessage;
-      end;
-
-      //DebugOutput('received message ' + msgClass.ClassName);
-
-      Assert(Assigned(msgClass));
-      Result := msgClass.CreateFromIOHandler(AIOHandler, msgLen-1) as IMessage; { за вычитом длины идентификатора }
-    end else
-      Result := TKeepAliveMessage.CreateFromIOHandler(AIOHandler, msgLen) as IMessage;
-  end;
-end;
-
-procedure TFixedMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
-begin
-  with AIOHandler do
-  begin
-    WriteCardinal(MessageLen);
-    WriteByte(Byte(ClassMessageID));
-  end;
-end;
-
-{ TExtensionMessage }
-
-class function TExtensionMessage.ClassMessageID: TFixedMessageID;
-begin
-  Result := idExtended;
-end;
-
-constructor TExtensionMessage.Create(AMessageID: Byte;
-  AExtendedMsgData: TUniString);
-begin
-  inherited Create;
-  FMessageID := AMessageID;
-  FMessageData.Assign(AExtendedMsgData);
-end;
-
-constructor TExtensionMessage.Create(ASupportsDict: IDictionary<string, Byte>;
-  AExtendedMsg: IExtension);
-begin
-  inherited Create;
-  if Supports(AExtendedMsg, IExtensionHandshake) then
-    FMessageID := HandshakeMsgID
-  else
-  begin
-    Assert(Assigned(ASupportsDict));
-    Assert(ASupportsDict.ContainsKey(AExtendedMsg.SupportName));
-
-    FMessageID := ASupportsDict[AExtendedMsg.SupportName];
-  end;
-  FExtendedMsg := AExtendedMsg;
-end;
-
-function TExtensionMessage.GetExtension: IExtension;
-var
-  i: Integer;
-begin
-  if not Assigned(FExtendedMsg) then
-  begin
-    if FMessageID = HandshakeMsgID then
-      FExtendedMsg := TExtensionHandshake.Create(FMessageData)
-    else
-    for i := 0 to TExtension.SupportsList.Count - 1 do
-    begin
-      if i + 1 = FMessageID then
-        FExtendedMsg := TExtension.SupportsList[i].Value.Create(FMessageData);
-    end;
-  end;
-
-  Result := FExtendedMsg;
-end;
-
-function TExtensionMessage.GetMessageID: Byte;
-begin
-  Result := FMessageID;
-end;
-
-function TExtensionMessage.MessageLen: Integer;
-begin
-  Result := inherited MessageLen;
-  Result := Result + SizeOf(FMessageID) + FExtendedMsg.Size;
-end;
-
-procedure TExtensionMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
-  AMsgSize: Integer);
-//var
-//  buf: TIdBytes;
-begin
-  FMessageID := AIOHandler.ReadByte;
-//  AIOHandler.ReadBytes(buf, AMsgSize - 1);
-//  FMessageData := buf;
-  AIOHandler.ReadUniString(AMsgSize - 1, FMessageData);
-end;
-
-procedure TExtensionMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
-begin
-  inherited WriteToIOHandler(AIOHandler);
-
-  AIOHandler.WriteByte(FMessageID);
-  AIOHandler.WriteUniString(FExtendedMsg.Data);
-end;
-
-{ TKeepAliveMessage }
-
-function TKeepAliveMessage.GetDummy: TUniString;
-begin
-  Result := FDmmy;
-end;
-
-procedure TKeepAliveMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
-  AMsgSize: Integer);
-//var
-//  buf: TIdBytes;
-begin
-  //AIOHandler.ReadBytes(buf, AMsgSize);
-  //FDmmy := buf;
-  AIOHandler.ReadUniString(AMsgSize, FDmmy);
-end;
-
-procedure TKeepAliveMessage.WriteToIOHandler(AIOHandler: TIdIOHandler);
-begin
-  { nope }
-end;
-
-{ TAtomicMessage }
-
-procedure TAtomicMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
-  AMsgSize: Integer);
-begin
-  { dummy }
-end;
-
-{ TUnchokeMessage }
-
-class function TUnchokeMessage.ClassMessageID: TFixedMessageID;
-begin
-  Result := idUnchoke;
-end;
-
-{ TInterestedMessage }
-
-class function TInterestedMessage.ClassMessageID: TFixedMessageID;
-begin
-  Result := idInterested;
-end;
-
-{ TNotInterestedMessage }
-
-class function TNotInterestedMessage.ClassMessageID: TFixedMessageID;
-begin
-  Result := idNotInterested;
-end;
 
 end.

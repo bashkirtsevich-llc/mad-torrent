@@ -295,8 +295,13 @@ begin
 end;
 
 function TSortedList<TKey, TValue>.TValueCollection.ToArray: TArray<TValue>;
+var
+  i: Integer;
 begin
+  SetLength(Result, GetCount);
 
+  for i := 0 to GetCount - 1 do
+    Result[i] := GetItem(i);
 end;
 
 { TSortedList<TKey, TValue>.TKeyCollection }

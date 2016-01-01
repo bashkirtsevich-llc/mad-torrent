@@ -1,35 +1,34 @@
-unit Bittorrent.Extensions;
+Ôªøunit Shareman.Bittorrent.Extensions;
 
 interface
 
 uses
   System.Classes, System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
-  Basic.Bencoding, Basic.UniString,
-  Bittorrent,
+  Shareman.Bittorrent, Basic.Bencoding, Basic.UniString,
   IdGlobal;
 
 type
-  TExtensionClasses = class of TExtension;
+  TBTExtensionClasses = class of TBTExtension;
 
-  TExtension = class abstract(TInterfacedObject, IExtension)
+  TBTExtension = class abstract(TInterfacedObject, IBTExtension)
   private
     function GetSupportName: string; inline;
     function GetSize: Integer; inline;
   protected
-    FData: TUniString; // ‰Îˇ ÍÂ¯ËÓ‚‡ÌËˇ ÂÁÛÎ¸Ú‡Ú‡
+    FData: TUniString; // –¥–ª—è –∫–µ—à–∏—Ä–æ–≤–∞–Ω–∏—è —Ä–µ–∑—É–ª—å—Ç–∞—Ç–∞
     procedure Decode(const AData: TUniString); virtual; abstract;
     function GetData: TUniString; virtual; abstract;
   public
     constructor Create(const AData: TUniString);
 
-    class var SupportsList: TList<TPair<string, TExtensionClasses>>;
+    class var SupportsList: TList<TPair<string, TBTExtensionClasses>>;
     class function GetClassSupportName: string; virtual; abstract;
-    class procedure AddExtension(AExtensionClass: TExtensionClasses); inline;
+    class procedure AddExtension(AExtensionClass: TBTExtensionClasses); inline;
     class constructor ClassCreate;
     class destructor ClassDestroy;
   end;
 
-  TExtensionHandshake = class(TExtension, IExtensionHandshake)
+  TBTExtensionHandshake = class(TBTExtension, IBTExtensionHandshake)
   private
     const
       MaxRequests     = 250;
@@ -58,7 +57,7 @@ type
     class function GetClassSupportName: string; override;
   end;
 
-  TExtensionMetadata = class(TExtension, IExtensionMetadata)
+  TBTExtensionMetadata = class(TBTExtension, IBTExtensionMetadata)
   public
     const
       BlockSize       = $4000; // 16Kb
@@ -71,16 +70,16 @@ type
   private
     FMessageDict: IBencodedDictionary;
     FPieceData: TUniString;
-    function GetMessageType: TMetadataMessageType; inline;
+    function GetMessageType: TBTMetadataMessageType; inline;
     function GetPiece: Integer; inline;
     function GetMetadata: TUniString; inline;
   protected
     procedure Decode(const AData: TUniString); override;
     function GetData: TUniString; override;
   public
-    constructor Create(AMessageType: TMetadataMessageType;
+    constructor Create(AMessageType: TBTMetadataMessageType;
       APiece: Integer; APieceData: TUniString); overload;
-    constructor Create(AMessageType: TMetadataMessageType;
+    constructor Create(AMessageType: TBTMetadataMessageType;
       APiece: Integer); overload;
 
     class function GetClassSupportName: string; override;
@@ -88,18 +87,18 @@ type
 
 implementation
 
-{ TExtension }
+{ TBTExtension }
 
-class procedure TExtension.AddExtension(AExtensionClass: TExtensionClasses);
+class procedure TBTExtension.AddExtension(AExtensionClass: TBTExtensionClasses);
 begin
-  SupportsList.Add(TPair<string, TExtensionClasses>.Create(AExtensionClass.GetClassSupportName, AExtensionClass));
+  SupportsList.Add(TPair<string, TBTExtensionClasses>.Create(AExtensionClass.GetClassSupportName, AExtensionClass));
 end;
 
-class constructor TExtension.ClassCreate;
+class constructor TBTExtension.ClassCreate;
 begin
-  SupportsList := TList<TPair<string, TExtensionClasses>>.Create(
-    TDelegatedComparer<TPair<string, TExtensionClasses>>.Create(
-      function (const Left, Right: TPair<string, TExtensionClasses>): Integer
+  SupportsList := TList<TPair<string, TBTExtensionClasses>>.Create(
+    TDelegatedComparer<TPair<string, TBTExtensionClasses>>.Create(
+      function (const Left, Right: TPair<string, TBTExtensionClasses>): Integer
       begin
         Result := Left.Key.CompareTo(Right.Key);
       end
@@ -107,31 +106,31 @@ begin
   );
 end;
 
-class destructor TExtension.ClassDestroy;
+class destructor TBTExtension.ClassDestroy;
 begin
   SupportsList.Free;
 end;
 
-constructor TExtension.Create(const AData: TUniString);
+constructor TBTExtension.Create(const AData: TUniString);
 begin
   inherited Create;
 
   Decode(AData);
 end;
 
-function TExtension.GetSize: Integer;
+function TBTExtension.GetSize: Integer;
 begin
   Result := GetData.Len;
 end;
 
-function TExtension.GetSupportName: string;
+function TBTExtension.GetSupportName: string;
 begin
   Result := GetClassSupportName;
 end;
 
-{ TExtensionHandshake }
+{ TBTExtensionHandshake }
 
-constructor TExtensionHandshake.Create(AClientVersion: string;
+constructor TBTExtensionHandshake.Create(AClientVersion: string;
   APort: TIdPort; AMetadataSize: Integer);
 var
   i: Integer;
@@ -144,8 +143,8 @@ begin
   FMessageDict  := BencodedDictionary;
   supports      := BencodedDictionary;
 
-  for i := 0 to TExtension.SupportsList.Count - 1 do
-    supports.Add(BencodeString(TExtension.SupportsList[i].Key), BencodeInteger(i + 1));
+  for i := 0 to TBTExtension.SupportsList.Count - 1 do
+    supports.Add(BencodeString(TBTExtension.SupportsList[i].Key), BencodeInteger(i + 1));
 
   FMessageDict.Add(BencodeString(SupportsKey)    , supports);
   FMessageDict.Add(BencodeString(VersionKey)     , BencodeString(AClientVersion));
@@ -154,12 +153,12 @@ begin
   FMessageDict.Add(BencodeString(MetadataSizeKey), BencodeInteger(AMetadataSize));
 end;
 
-class function TExtensionHandshake.GetClassSupportName: string;
+class function TBTExtensionHandshake.GetClassSupportName: string;
 begin
   raise Exception.Create('Cant use TExtensionHandshake as extension');
 end;
 
-function TExtensionHandshake.GetClientVersion: string;
+function TBTExtensionHandshake.GetClientVersion: string;
 var
   val: IBencodedString;
 begin
@@ -173,12 +172,12 @@ begin
     Result := 'unknown';
 end;
 
-function TExtensionHandshake.GetData: TUniString;
+function TBTExtensionHandshake.GetData: TUniString;
 begin
   Result := FMessageDict.Encode;
 end;
 
-function TExtensionHandshake.GetMetadataSize: Integer;
+function TBTExtensionHandshake.GetMetadataSize: Integer;
 var
   val: IBencodedInteger;
 begin
@@ -195,7 +194,7 @@ begin
     Result := 0;
 end;
 
-function TExtensionHandshake.GetPort: TIdPort;
+function TBTExtensionHandshake.GetPort: TIdPort;
 var
   val: IBencodedInteger;
 begin
@@ -212,7 +211,7 @@ begin
     Result := 0;
 end;
 
-function TExtensionHandshake.GetSupports: TDictionary<string, Byte>;
+function TBTExtensionHandshake.GetSupports: TDictionary<string, Byte>;
 var
   val: IBencodedDictionary;
   it: IBencodedValue;
@@ -239,7 +238,7 @@ begin
   end;
 end;
 
-procedure TExtensionHandshake.Decode(const AData: TUniString);
+procedure TBTExtensionHandshake.Decode(const AData: TUniString);
 begin
   BencodeParse(AData, False,
     function (ALen: Integer; AValue: IBencodedValue): Boolean
@@ -253,15 +252,15 @@ begin
     end);
 end;
 
-destructor TExtensionHandshake.Destroy;
+destructor TBTExtensionHandshake.Destroy;
 begin
   FSupports.Free;
   inherited;
 end;
 
-{ TExtensionMetadata }
+{ TBTExtensionMetadata }
 
-constructor TExtensionMetadata.Create(AMessageType: TMetadataMessageType;
+constructor TBTExtensionMetadata.Create(AMessageType: TBTMetadataMessageType;
   APiece: Integer; APieceData: TUniString);
 begin
 //  inherited Create;
@@ -277,13 +276,13 @@ begin
     FMessageDict.Add(BencodeString(TotalSizeKey), BencodeInteger(APieceData.Len));
 end;
 
-constructor TExtensionMetadata.Create(AMessageType: TMetadataMessageType;
+constructor TBTExtensionMetadata.Create(AMessageType: TBTMetadataMessageType;
   APiece: Integer);
 begin
   Create(AMessageType, APiece, '');
 end;
 
-procedure TExtensionMetadata.Decode(const AData: TUniString);
+procedure TBTExtensionMetadata.Decode(const AData: TUniString);
 begin
   BencodeParse(AData, False,
     function (ALen: Integer; AValue: IBencodedValue): Boolean
@@ -301,25 +300,25 @@ begin
     end);
 end;
 
-function TExtensionMetadata.GetData: TUniString;
+function TBTExtensionMetadata.GetData: TUniString;
 begin
   Result := FMessageDict.Encode;
 end;
 
-function TExtensionMetadata.GetMessageType: TMetadataMessageType;
+function TBTExtensionMetadata.GetMessageType: TBTMetadataMessageType;
 begin
   Assert(FMessageDict.ContainsKey(MessageTypeKey));
   Assert(Supports(FMessageDict[MessageTypeKey], IBencodedInteger));
 
-  Result := TMetadataMessageType((FMessageDict[MessageTypeKey] as IBencodedInteger).Value);
+  Result := TBTMetadataMessageType((FMessageDict[MessageTypeKey] as IBencodedInteger).Value);
 end;
 
-function TExtensionMetadata.GetMetadata: TUniString;
+function TBTExtensionMetadata.GetMetadata: TUniString;
 begin
   Result := FPieceData;
 end;
 
-function TExtensionMetadata.GetPiece: Integer;
+function TBTExtensionMetadata.GetPiece: Integer;
 begin
   Assert(FMessageDict.ContainsKey(PieceKey));
   Assert(Supports(FMessageDict[PieceKey], IBencodedInteger));
@@ -327,7 +326,7 @@ begin
   Result := (FMessageDict[PieceKey] as IBencodedInteger).Value;
 end;
 
-class function TExtensionMetadata.GetClassSupportName: string;
+class function TBTExtensionMetadata.GetClassSupportName: string;
 begin
   Result := ExtensionName;
 end;

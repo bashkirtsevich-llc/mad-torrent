@@ -4,53 +4,62 @@ interface
 
 uses
   System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
-  System.DateUtils,
-  Spring.Collections,
-  Bittorrent, Bittorrent.Bitfield, Bittorrent.Utils, BusyObj, Basic.UniString,
-  ThreadPool,
+  System.DateUtils, System.Hash,
+  Basic.UniString,
+  Common.BusyObj, Common.ThreadPool,
+  Bittorrent, Bittorrent.Bitfield,
   IdGlobal, IdContext;
 
 type
   TPeer = class(TBusy, IPeer)
   private
     const
-      KeepAliveInterval = 20;
-      ConnectionTimeout = 30;
-  private
-    FConnection: IConnection;
+      MaxSendQueueSize  = 500;
+      MaxRecvQueueSize  = 100;
+      KeepAliveInterval = 5;
+      ConnectionTimeout = 60;
+  protected
     FInfoHash: TUniString;
+    FOurClientID: TUniString;
+    FClientID: TUniString;
+    FConnection: IConnection;
     FBitfield: TBitField;
-    FPeerID: string;
-    FConnected: Boolean;
+    FConnectionEstablished: Boolean;
     FFlags: TPeerFlags;
     FThreadPool: TThreadPool;
     FOnConnect: TProc<IPeer, IMessage>;
+    FOnDisonnect: TProc<IPeer>;
     FOnChoke: TProc<IPeer>;
     FOnUnchoke: TProc<IPeer>;
     FOnInterest: TProc<IPeer>;
     FOnNotInterest: TProc<IPeer>;
-    FOnBitField: TProc<TBitField>;
-    FOnHave: TProc<Integer>;
+    FOnStart: TProc<IPeer, TUniString, TBitField>;
+    FOnHave: TProc<IPeer, Integer>;
     FOnRequestPiece: TProc<IPeer, Integer, Integer, Integer>;
-    FOnPiece: TProc<IPeer, Integer, Integer, TUniString>;
-    FOnCancel: TProc<IPeer, Integer, Integer, Integer>;
-    FOnExtendedMessage: TProc<IPeer, IExtension>;
+    FOnPiece: TPieceProc;
+    FOnCancel: TProc<IPeer, Integer, Integer>;
     FOnException: TProc<IPeer, Exception>;
+    FOnUpdateCounter: TProc<IPeer, UInt64, UInt64>;
     FLastKeepAlive: TDateTime;
     FLastResponse: TDateTime;
 
+    FLastRecvSize,
+    FLastSentSize: UInt64;
+
     FSendQueue: TQueue<IMessage>;
 
-    FExteinsionSupports: IDictionary<string, Byte>;
-
     FHashCode: Integer;
-
-
+  private
+    function GetInfoHash: TUniString; inline;
+    function GetClientID: TUniString; inline;
     function GetBitfield: TBitField; inline;
-    function GetConnected: Boolean; inline;
+    function GetConnectionEstablished: Boolean; inline;
+    function GetConnectionConnected: Boolean; inline;
     function GetFlags: TPeerFlags; inline;
     function GetOnConnect: TProc<IPeer, IMessage>; inline;
     procedure SetOnConnect(Value: TProc<IPeer, IMessage>); inline;
+    function GetOnDisonnect: TProc<IPeer>; inline;
+    procedure SetOnDisconnect(Value: TProc<IPeer>); inline;
     function GetOnChoke: TProc<IPeer>; inline;
     procedure SetOnChoke(Value: TProc<IPeer>); inline;
     function GetOnUnchoke: TProc<IPeer>; inline;
@@ -59,25 +68,30 @@ type
     procedure SetOnInterest(Value: TProc<IPeer>); inline;
     function GetOnNotInerest: TProc<IPeer>; inline;
     procedure SetOnNotInerest(Value: TProc<IPeer>); inline;
-    function GetOnBitField: TProc<TBitField>; inline;
-    procedure SetOnBitField(Value: TProc<TBitField>); inline;
-    function GetOnHave: TProc<Integer>; inline;
-    procedure SetOnHave(Value: TProc<Integer>); inline;
+    function GetOnStart: TProc<IPeer, TUniString, TBitField>; inline;
+    procedure SetOnStart(Value: TProc<IPeer, TUniString, TBitField>); inline;
+    function GetOnHave: TProc<IPeer, Integer>; inline;
+    procedure SetOnHave(Value: TProc<IPeer, Integer>); inline;
     function GetOnRequest: TProc<IPeer, Integer, Integer, Integer>; inline;
     procedure SetOnRequest(Value: TProc<IPeer, Integer, Integer, Integer>); inline;
-    function GetOnPiece: TProc<IPeer, Integer, Integer, TUniString>; inline;
-    procedure SetOnPiece(Value: TProc<IPeer, Integer, Integer, TUniString>); inline;
-    function GetOnCancel: TProc<IPeer, Integer, Integer, Integer>; inline;
-    procedure SetOnCancel(Value: TProc<IPeer, Integer, Integer, Integer>); inline;
-    function GetOnExtendedMessage: TProc<IPeer, IExtension>; inline;
-    procedure SetOnExtendedMessage(Value: TProc<IPeer, IExtension>); inline;
+    function GetOnPiece: TPieceProc; inline;
+    procedure SetOnPiece(Value: TPieceProc); inline;
+    function GetOnCancel: TProc<IPeer, Integer, Integer>; inline;
+    procedure SetOnCancel(Value: TProc<IPeer, Integer, Integer>); inline;
     function GetOnException: TProc<IPeer, Exception>; inline;
     procedure SetOnException(Value: TProc<IPeer, Exception>); inline;
+    function GetOnUpdateCounter: TProc<IPeer, UInt64, UInt64>; inline;
+    procedure SetOnUpdateCounter(Value: TProc<IPeer, UInt64, UInt64>); inline;
 
     function GetHost: string; inline;
     function GetPort: TIdPort; inline;
     function GetIPVer: TIdIPVersion; inline;
-    function GetExteinsionSupports: IDictionary<string, Byte>; inline;
+    function GetConnectionType: TConnectionType; inline;
+    function GetBytesSent: UInt64; inline;
+    function GetBytesReceived: UInt64; inline;
+    function GetRate: Single; inline;
+
+    procedure UpdateCounter; inline;
 
     // messages
     procedure KeepAlive; inline;
@@ -86,36 +100,44 @@ type
     procedure Choke; inline;
     procedure Unchoke; inline;
     procedure Request(AIndex, AOffset, ALength: Integer); inline;
+    procedure Cancel(AIndex, AOffset: Integer); inline;
     procedure SendHave(AIndex: Integer); inline;
     procedure SendBitfield(const ABitfield: TBitField); inline;
-    procedure SendPiece(APieceIndex, AOffset: Integer; const ABlock: TUniString); inline;
-    procedure SendExtensionMessage(AExtension: IExtension); inline;
-    procedure SendPort(APort: TIdPort); inline;
+    procedure SendPiece(APieceIndex, AOffset: Integer;
+      const ABlock: TUniString); inline;
+
+    function GetHandshakeMessage: IMessage; inline;
+
+    procedure Disconnect; inline;
 
     procedure ConnectOutgoing; { отправка и прием хендшейка наружу }
     procedure ConnectIncoming; { прием и отправка хендшейка извне }
-  protected
-    procedure DoSync; override;
-  private
-    procedure DoHandleMessage(AMessage: IMessage); inline;
 
+    procedure DoHandleMessage(AMessage: IMessage); inline;
+    procedure DoHandleHandShakeMessage(AMessage: IMessage); inline;
     procedure DoChoke; inline;
     procedure DoUnchoke; inline;
     procedure DoInterested; inline;
     procedure DoNotInterested; inline;
     procedure DoHave(APieceIndex: Integer); inline;
-    procedure DoBitfield(const ABitField: TBitField); inline;
+    procedure DoStart(const ABitField: TBitField); inline;
     procedure DoRequest(APieceIndex, AOffset, ASize: Integer); inline;
-    procedure DoPiece(APieceIndex, AOffset: Integer; const ABlock: TUniString); inline;
-    procedure DoCancel(APieceIndex, AOffset, ASize: Integer); inline;
-    procedure DoPort(APoert: TIdPort); inline;
-    procedure DoExtended(AExtension: IExtension); inline;
+    procedure DoPiece(APieceIndex, AOffset: Integer;
+      const AHash, ABlock: TUniString); inline;
+    procedure DoCancel(APieceIndex, AOffset: Integer); inline;
+    procedure DoDisconnect;
+  protected
+    procedure DoSync; override; final;
+  public
+    class function CalcHashCode(const AHost: string; APort: TIdPort): Integer; static;
   public
     constructor Create(AThreadPoolEx: TThreadPool; const AHost: string;
-      APort: TIdPort; const AInfoHash: TUniString; const APeerID: string;
+      APort: TIdPort; const AInfoHash, AClientID: TUniString;
       AIPVer: TIdIPVersion = Id_IPv4); overload;
-    constructor Create(AThreadPoolEx: TThreadPool; AConnection: IConnection;
-      const APeerID: string); overload;
+
+    constructor Create(AThreadPoolEx: TThreadPool;
+      AConnection: IConnection; const AOurClientID: TUniString); overload;
+
     destructor Destroy; override;
 
     function GetHashCode: Integer; override;
@@ -132,27 +154,25 @@ procedure TPeer.ConnectIncoming;
 var
   msg: IMessage;
 begin
+  { итак в критической секции }
   try
     msg := FConnection.ReceiveMessage(True);
     { проверки }
     Assert(Assigned(msg));
-    Assert(Supports(msg, IHandshakeMessage));
+    DoHandleHandShakeMessage(msg);
 
     if Assigned(FOnConnect) then
       FOnConnect(Self, msg);
 
-    with msg as IHandshakeMessage do
-    begin
-      FConnection.SendMessage(THandshakeMessage.Create(InfoHash, FPeerID, True, False, True) as IMessage);
-      FInfoHash.Assign(InfoHash);
-      FPeerID := PeerID;
-    end;
+    { отсылаем ответный хендшейк, если FOnConnect не сгенерил исключение }
+    FConnection.SendMessage(GetHandshakeMessage);
 
-    FConnected        := True; { успешно! }
-    FLastResponse     := UtcNow;
+    FConnectionEstablished := True; { успешно! }
+    FLastResponse   := Now;
+    FLastKeepAlive  := Now;
   except
     FConnection.Disconnect;
-    raise Exception.Create('Invalid peer');
+    raise EPeerInvalidPeer.Create('Invalid peer');
   end;
 end;
 
@@ -162,72 +182,91 @@ var
 begin
   FConnection.Connect;
   try
-    FConnection.SendMessage(THandshakeMessage.Create(FInfoHash, FPeerID, True, False, True) as IMessage);
+    { отсылаем хендшейк и ждем ответ }
+    FConnection.SendMessage(GetHandshakeMessage);
 
     msg := FConnection.ReceiveMessage(True);
-    { проверки }
     Assert(Assigned(msg));
-    Assert(Supports(msg, IHandshakeMessage));
+    DoHandleHandShakeMessage(msg);
 
     if Assigned(FOnConnect) then
       FOnConnect(Self, msg);
 
-    FConnected      := True; { успешно! }
-    FLastResponse   := UtcNow;
-    FLastKeepAlive  := UtcNow;
+    FConnectionEstablished := True; { успешно! }
+    FLastResponse   := Now;
+    FLastKeepAlive  := FLastResponse;
   except
     on E: Exception do
     begin
       FConnection.Disconnect;
-      raise Exception.Create('Invalid peer');
+      raise EPeerInvalidPeer.Create('Invalid peer');
     end;
   end;
 end;
 
 constructor TPeer.Create(AThreadPoolEx: TThreadPool; AConnection: IConnection;
-  const APeerID: string);
-var
-  tmp: TUniString;
+  const AOurClientID: TUniString);
 begin
   inherited Create;
 
+  FLastRecvSize     := 0;
+  FLastSentSize     := 0;
+
   FConnection       := AConnection;
+  FConnection.OnDisconnect := DoDisconnect;
+
+  FOurClientID      := AOurClientID;
 
   FThreadPool       := AThreadPoolEx;
-  FConnected        := False;
+  FConnectionEstablished := False;
 
   FFlags            := [pfWeChoke, pfTheyChoke];
-  FPeerID           := APeerID;
-
-  tmp               := AConnection.Host;
-  tmp               := tmp + AConnection.Port;
-  FHashCode         := BobJenkinsHash(tmp.DataPtr[0]^, tmp.Len, 0);
-
+  FHashCode         := CalcHashCode(AConnection.Host, AConnection.Port);
   FSendQueue        := TQueue<IMessage>.Create;
 end;
 
 constructor TPeer.Create(AThreadPoolEx: TThreadPool; const AHost: string;
-  APort: TIdPort; const AInfoHash: TUniString; const APeerID: string; AIPVer: TIdIPVersion);
+  APort: TIdPort; const AInfoHash, AClientID: TUniString; AIPVer: TIdIPVersion);
 begin
-  Create(AThreadPoolEx, TOutgoingConnection.Create(AHost, APort, AIPVer), APeerID);
+  Create(AThreadPoolEx, TOutgoingConnection.Create(AHost, APort, AIPVer), AClientID);
 
   FInfoHash.Assign(AInfoHash);
+  FClientID.Assign(AClientID);
 end;
 
 destructor TPeer.Destroy;
 begin
+  if (FConnection.ConnectionType = ctOutgoing) and FConnection.Connected then
+    FConnection.Disconnect;
+
   FSendQueue.Free;
   inherited;
 end;
 
-function TPeer.GetConnected: Boolean;
+procedure TPeer.Disconnect;
 begin
-  Result := FConnected;
+  FConnection.Disconnect;
+  FConnectionEstablished := False;
 end;
 
-function TPeer.GetExteinsionSupports: IDictionary<string, Byte>;
+function TPeer.GetClientID: TUniString;
 begin
-  Result := FExteinsionSupports;
+  Result := FClientID;
+end;
+
+function TPeer.GetConnectionConnected: Boolean;
+begin
+  Result := FConnection.Connected;
+end;
+
+function TPeer.GetConnectionEstablished: Boolean;
+begin
+  Result := FConnectionEstablished;
+end;
+
+function TPeer.GetConnectionType: TConnectionType;
+begin
+  Result := FConnection.ConnectionType;
 end;
 
 function TPeer.GetFlags: TPeerFlags;
@@ -240,6 +279,21 @@ begin
   Result := FBitfield;
 end;
 
+function TPeer.GetBytesReceived: UInt64;
+begin
+  Result := FConnection.BytesReceived;
+end;
+
+function TPeer.GetBytesSent: UInt64;
+begin
+  Result := FConnection.BytesSent;
+end;
+
+function TPeer.GetHandshakeMessage: IMessage;
+begin
+  Result := THandshakeMessage.Create(FInfoHash, FOurClientID, True, False, True);
+end;
+
 function TPeer.GetHashCode: Integer;
 begin
   Result := FHashCode;
@@ -250,17 +304,22 @@ begin
   Result := FConnection.Host;
 end;
 
+function TPeer.GetInfoHash: TUniString;
+begin
+  Result := FInfoHash;
+end;
+
 function TPeer.GetIPVer: TIdIPVersion;
 begin
   Result := FConnection.IPVer;
 end;
 
-function TPeer.GetOnBitField: TProc<TBitField>;
+function TPeer.GetOnStart: TProc<IPeer, TUniString, TBitField>;
 begin
-  Result := FOnBitField;
+  Result := FOnStart;
 end;
 
-function TPeer.GetOnCancel: TProc<IPeer, Integer, Integer, Integer>;
+function TPeer.GetOnCancel: TProc<IPeer, Integer, Integer>;
 begin
   Result := FOnCancel;
 end;
@@ -275,17 +334,17 @@ begin
   Result := FOnConnect;
 end;
 
+function TPeer.GetOnDisonnect: TProc<IPeer>;
+begin
+  Result := FOnDisonnect;
+end;
+
 function TPeer.GetOnException: TProc<IPeer, Exception>;
 begin
   Result := FOnException;
 end;
 
-function TPeer.GetOnExtendedMessage: TProc<IPeer, IExtension>;
-begin
-  Result := FOnExtendedMessage;
-end;
-
-function TPeer.GetOnHave: TProc<Integer>;
+function TPeer.GetOnHave: TProc<IPeer, Integer>;
 begin
   Result := FOnHave;
 end;
@@ -300,7 +359,7 @@ begin
   Result := FOnNotInterest;
 end;
 
-function TPeer.GetOnPiece: TProc<IPeer, Integer, Integer, TUniString>;
+function TPeer.GetOnPiece: TPieceProc;
 begin
   Result := FOnPiece;
 end;
@@ -315,26 +374,41 @@ begin
   Result := FOnUnchoke;
 end;
 
+function TPeer.GetOnUpdateCounter: TProc<IPeer, UInt64, UInt64>;
+begin
+  Result := FOnUpdateCounter;
+end;
+
 function TPeer.GetPort: TIdPort;
 begin
   Result := FConnection.Port;
+end;
+
+function TPeer.GetRate: Single;
+begin
+  Result := GetBytesSent / GetBytesReceived;
+end;
+
+procedure TPeer.DoHandleHandShakeMessage(AMessage: IMessage);
+begin
+  Assert(Supports(AMessage, IHandshakeMessage));
+
+  with AMessage as IHandshakeMessage do
+  begin
+    case FConnection.ConnectionType of
+      ctOutgoing: Assert(FInfoHash = InfoHash);
+      ctIncoming: FInfoHash.Assign(InfoHash);
+    end;
+
+    FClientID.Assign(PeerID);
+  end;
 end;
 
 procedure TPeer.SendBitfield(const ABitfield: TBitField);
 begin
   Enter;
   try
-    FSendQueue.Enqueue(TBitfieldMessage.Create(ABitfield) as IMessage);
-  finally
-    Leave;
-  end;
-end;
-
-procedure TPeer.SendExtensionMessage(AExtension: IExtension);
-begin
-  Enter;
-  try
-    FSendQueue.Enqueue(TExtensionMessage.Create(FExteinsionSupports, AExtension) as IMessage);
+    FSendQueue.Enqueue(TBitfieldMessage.Create(ABitfield));
   finally
     Leave;
   end;
@@ -344,7 +418,27 @@ procedure TPeer.SendHave(AIndex: Integer);
 begin
   Enter;
   try
-    FSendQueue.Enqueue(THaveMessage.Create(AIndex) as IMessage);
+    FSendQueue.Enqueue(THaveMessage.Create(AIndex));
+  finally
+    Leave;
+  end;
+end;
+
+class function TPeer.CalcHashCode(const AHost: string; APort: TIdPort): Integer;
+var
+  tmp: TUniString;
+begin
+  tmp     := AHost;
+  tmp     := tmp + APort;
+  Result  := THashBobJenkins.GetHashValue(tmp.DataPtr[0]^, tmp.Len, 0);
+end;
+
+procedure TPeer.Cancel(AIndex, AOffset: Integer);
+begin
+  Enter;
+  try
+    {TODO -oMAD -cMedium : Добавить 3-й параметр}
+    FSendQueue.Enqueue(TCancelMessage.Create(AIndex, AOffset, 0));
   finally
     Leave;
   end;
@@ -354,7 +448,7 @@ procedure TPeer.Choke;
 begin
   Enter;
   try
-    FSendQueue.Enqueue(TChokeMessage.Create as IMessage);
+    FSendQueue.Enqueue(TChokeMessage.Create);
     FFlags := FFlags + [pfWeChoke];
   finally
     Leave;
@@ -365,7 +459,7 @@ procedure TPeer.Interested;
 begin
   Enter;
   try
-    FSendQueue.Enqueue(TInterestedMessage.Create as IMessage);
+    FSendQueue.Enqueue(TInterestedMessage.Create);
     FFlags := FFlags + [pfWeInterested];
   finally
     Leave;
@@ -386,28 +480,19 @@ procedure TPeer.NotInterested;
 begin
   Enter;
   try
-    FSendQueue.Enqueue(TNotInterestedMessage.Create as IMessage);
+    FSendQueue.Enqueue(TNotInterestedMessage.Create);
     FFlags := FFlags - [pfWeInterested];
   finally
     Leave;
   end;
 end;
 
-procedure TPeer.SendPiece(APieceIndex, AOffset: Integer; const ABlock: TUniString);
+procedure TPeer.SendPiece(APieceIndex, AOffset: Integer;
+  const ABlock: TUniString);
 begin
   Enter;
   try
-    FSendQueue.Enqueue(TPieceMessage.Create(APieceIndex, AOffset, ABlock) as IMessage);
-  finally
-    Leave;
-  end;
-end;
-
-procedure TPeer.SendPort(APort: TIdPort);
-begin
-  Enter;
-  try
-    FSendQueue.Enqueue(TPortMessage.Create(APort) as IMessage);
+    FSendQueue.Enqueue(TPieceMessage.Create(APieceIndex, AOffset, ABlock));
   finally
     Leave;
   end;
@@ -427,19 +512,33 @@ procedure TPeer.Unchoke;
 begin
   Enter;
   try
-    FSendQueue.Enqueue(TUnchokeMessage.Create as IMessage);
+    FSendQueue.Enqueue(TUnchokeMessage.Create);
     FFlags := FFlags - [pfWeChoke];
   finally
     Leave;
   end;
 end;
 
-procedure TPeer.SetOnBitField(Value: TProc<TBitField>);
+procedure TPeer.UpdateCounter;
+var
+  dDelta, uDelta: UInt64;
 begin
-  FOnBitField := Value;
+  dDelta := FConnection.BytesReceived - FLastRecvSize;
+  uDelta := FConnection.BytesSent     - FLastSentSize;
+
+  FLastRecvSize := FConnection.BytesReceived;
+  FLastSentSize := FConnection.BytesSent;
+
+  if Assigned(FOnUpdateCounter) then
+    FOnUpdateCounter(Self, dDelta, uDelta);
 end;
 
-procedure TPeer.SetOnCancel(Value: TProc<IPeer, Integer, Integer, Integer>);
+procedure TPeer.SetOnStart(Value: TProc<IPeer, TUniString, TBitField>);
+begin
+  FOnStart := Value;
+end;
+
+procedure TPeer.SetOnCancel(Value: TProc<IPeer, Integer, Integer>);
 begin
   FOnCancel := Value;
 end;
@@ -454,17 +553,17 @@ begin
   FOnConnect := Value;
 end;
 
+procedure TPeer.SetOnDisconnect(Value: TProc<IPeer>);
+begin
+  FOnDisonnect := Value;
+end;
+
 procedure TPeer.SetOnException(Value: TProc<IPeer, Exception>);
 begin
   FOnException := Value;
 end;
 
-procedure TPeer.SetOnExtendedMessage(Value: TProc<IPeer, IExtension>);
-begin
-  FOnExtendedMessage := Value;
-end;
-
-procedure TPeer.SetOnHave(Value: TProc<Integer>);
+procedure TPeer.SetOnHave(Value: TProc<IPeer, Integer>);
 begin
   FOnHave := Value;
 end;
@@ -479,7 +578,7 @@ begin
   FOnNotInterest := Value;
 end;
 
-procedure TPeer.SetOnPiece(Value: TProc<IPeer, Integer, Integer, TUniString>);
+procedure TPeer.SetOnPiece(Value: TPieceProc);
 begin
   FOnPiece := Value;
 end;
@@ -494,18 +593,23 @@ begin
   FOnUnchoke := Value;
 end;
 
-procedure TPeer.DoBitfield(const ABitField: TBitField);
+procedure TPeer.SetOnUpdateCounter(Value: TProc<IPeer, UInt64, UInt64>);
+begin
+  FOnUpdateCounter := Value;
+end;
+
+procedure TPeer.DoStart(const ABitField: TBitField);
 begin
   FBitfield := ABitField;
 
-  if Assigned(FOnBitfield) then
-    FOnBitfield(FBitfield);
+  if Assigned(FOnStart) then
+    FOnStart(Self, FInfoHash, ABitField);
 end;
 
-procedure TPeer.DoCancel(APieceIndex, AOffset, ASize: Integer);
+procedure TPeer.DoCancel(APieceIndex, AOffset: Integer);
 begin
   if Assigned(FOnCancel) then
-    FOnCancel(Self, APieceIndex, AOffset, ASize);
+    FOnCancel(Self, APieceIndex, AOffset);
 end;
 
 procedure TPeer.DoChoke;
@@ -516,13 +620,10 @@ begin
     FOnChoke(Self);
 end;
 
-procedure TPeer.DoExtended(AExtension: IExtension);
+procedure TPeer.DoDisconnect;
 begin
-  if Supports(AExtension, IExtensionHandshake) then
-    FExteinsionSupports := (AExtension as IExtensionHandshake).Supports;
-
-  if Assigned(FOnExtendedMessage) then
-    FOnExtendedMessage(Self, AExtension);
+  if Assigned(FOnDisonnect) then
+    FOnDisonnect(Self);
 end;
 
 procedure TPeer.DoHandleMessage(AMessage: IMessage);
@@ -543,22 +644,20 @@ begin
         DoHave(PieceIndex);
     idBitfield      :  { список кусков, которые он имеет }
       with (AMessage as IBitfieldMessage) do
-        DoBitfield(Bits);
+        DoStart(BitField);
     idRequest       :  { с нас запросили куск/блок }
       with (AMessage as IRequestMessage) do
         DoRequest(PieceIndex, Offset, Size);
     idPiece         :  { прислали блок/кусок }
       with (AMessage as IPieceMessage) do
-        DoPiece(PieceIndex, Offset, Block);
+        DoPiece(PieceIndex, Offset, '', Block);
     idCancel        :  { отменяет свой запрос }
       with (AMessage as ICancelMessage) do
-        DoCancel(PieceIndex, Offset, Size);
-    idPort          :  { для ДХТ и чего-то там еще }
-      with (AMessage as IPortMessage) do
-        DoPort(Port);
-    idExtended      :
-      with (AMessage as IExtensionMessage) do
-        DoExtended(Extension);
+        DoCancel(PieceIndex, Offset);
+    idPort          : ;{ для DHT }
+    idExtended      : ;
+//      with (AMessage as IBTExtensionMessage) do
+//        DoExtended(Extension);
   else
     raise Exception.Create('Unknown message');
   end;
@@ -566,11 +665,13 @@ end;
 
 procedure TPeer.DoHave(APieceIndex: Integer);
 begin
-  { отмечаем в маске и выбрасываем из очереди на отдачу }
+  Assert(not FBitfield[APieceIndex]);
+
+  { отмечаем в маске }
   FBitfield[APieceIndex] := True;
 
   if Assigned(FOnHave) then
-    FOnHave(APieceIndex);
+    FOnHave(Self, APieceIndex);
 end;
 
 procedure TPeer.DoInterested;
@@ -597,15 +698,10 @@ begin
 end;
 
 procedure TPeer.DoPiece(APieceIndex, AOffset: Integer;
-  const ABlock: TUniString);
+  const AHash, ABlock: TUniString);
 begin
   if Assigned(FOnPiece) then
-    FOnPiece(Self, APieceIndex, AOffset, ABlock);
-end;
-
-procedure TPeer.DoPort(APoert: TIdPort);
-begin
-
+    FOnPiece(Self, APieceIndex, AOffset, AHash, ABlock);
 end;
 
 procedure TPeer.DoRequest(APieceIndex, AOffset, ASize: Integer);
@@ -621,43 +717,61 @@ begin
   FThreadPool.Exec(function : Boolean
   var
     msg: IMessage;
+    i: Integer;
+    t: TDateTime;
   begin
     try
-      { контолируем соединение }
-      if not GetConnected then
+      if GetConnectionConnected and GetConnectionEstablished then
       begin
-        if FConnection.ConnectionType = ctOutgoing then
-          ConnectOutgoing
-        else
-          ConnectIncoming;
-      end else
-      begin
-        if SecondsBetween(UtcNow, FLastKeepAlive) >= KeepAliveInterval then
+        t := Now;
+        if SecondsBetween(t, FLastKeepAlive) >= KeepAliveInterval then
         begin
           KeepAlive;
-          FLastKeepAlive := UtcNow;
+          FLastKeepAlive := t;
         end;
 
         { долго молчит -- отпинываем }
-        if SecondsBetween(UtcNow, FLastResponse) >= ConnectionTimeout then
+        if SecondsBetween(t, FLastResponse) >= ConnectionTimeout then
         begin
           FConnection.Disconnect;
-          raise Exception.Create('Connection timeout');
+          raise EPeerConnectionTimeout.Create('Connection timeout');
         end;
 
-        if FSendQueue.Count > 0 then
+        { выплёвываем очередь сообщений в сеть (не даем отправить более MaxSendQueueSize сообщений) }
+        i := 0;
+        while (FSendQueue.Count > 0) and (i < MaxSendQueueSize) and GetConnectionConnected do
         begin
           FConnection.SendMessage(FSendQueue.Dequeue);
-          { add to "WaitResponse" queue }
+          Inc(i);
         end;
 
-        msg := FConnection.ReceiveMessage;
-        if Assigned(msg) then
+        { пытаемся принять MaxRecvQueueSize сообщений }
+        i := 0;
+        while (i < MaxRecvQueueSize) and GetConnectionConnected do
         begin
-          DoHandleMessage(msg);
-          { обновить время последнего ответа }
-          FLastResponse := UtcNow;
+          msg := FConnection.ReceiveMessage;
+          if Assigned(msg) then
+            DoHandleMessage(msg)
+          else
+            Break;
+
+          Inc(i);
         end;
+
+        { обновить время последнего ответа }
+        if i > 0 then // small optimization against frequent call's of UtcNow
+          FLastResponse := t;
+
+        UpdateCounter; // обновляем счетчик трафика
+      end else
+      case FConnection.ConnectionType of { контолируем соединение }
+        ctIncoming:
+          if GetConnectionConnected and not GetConnectionEstablished then
+            ConnectIncoming; // к нам подключились -- начинаем диалог
+
+        ctOutgoing:
+          if not GetConnectionConnected or not GetConnectionEstablished then
+            ConnectOutgoing; // мы цепляемся
       end;
     except
       on E: Exception do

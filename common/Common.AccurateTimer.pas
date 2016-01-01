@@ -1,4 +1,4 @@
-unit AccurateTimer;
+unit Common.AccurateTimer;
 
 interface
 
@@ -15,6 +15,5 @@ begin
   delay := -10 * AMicSec;
   NtDelayExecution(False, @delay);
 end;
-
 
 end.
