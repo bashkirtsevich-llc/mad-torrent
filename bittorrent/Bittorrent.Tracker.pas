@@ -34,7 +34,7 @@ type
 
     procedure ResponsePeerInfo(const AHost: string; APort: TIdPort); inline;
     procedure DoSync; override; final;
-  public
+
     constructor Create(AThreadPool: TThreadPool; const AInfoHash: TUniString;
       AAnnouncePort: TIdPort; AAnnounceInterval, ARetrackInterval: Integer); reintroduce;
   end;
@@ -54,6 +54,17 @@ type
     FBytesDownloaded: Int64;
     FBytesLeft: Int64;
     FBytesCorrupt: Int64;
+  end;
+
+  TWebTracker = class abstract(TStatTracker, IWebTracker)
+  private
+    function GetTrackerURL: string; inline;
+  protected
+    FTrackerURL: string;
+
+    constructor Create(AThreadPool: TThreadPool; const AInfoHash: TUniString;
+      AAnnouncePort: TIdPort; AAnnounceInterval, ARetrackInterval: Integer;
+      ATrackerURL: string); reintroduce;
   end;
 
 implementation
@@ -170,6 +181,23 @@ end;
 procedure TStatTracker.SetBytesUploaded(const Value: Int64);
 begin
   FBytesUploaded := Value;
+end;
+
+{ TWebTracker }
+
+constructor TWebTracker.Create(AThreadPool: TThreadPool;
+  const AInfoHash: TUniString; AAnnouncePort: TIdPort; AAnnounceInterval,
+  ARetrackInterval: Integer; ATrackerURL: string);
+begin
+  inherited Create(AThreadPool, AInfoHash, AAnnouncePort, AAnnounceInterval,
+    ARetrackInterval);
+
+  FTrackerURL := ATrackerURL;
+end;
+
+function TWebTracker.GetTrackerURL: string;
+begin
+  Result := FTrackerURL;
 end;
 
 end.
