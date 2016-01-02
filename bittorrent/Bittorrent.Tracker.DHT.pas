@@ -19,7 +19,8 @@ type
   private
     FAnnounceTask: IAnnounceTask;
     FGetPeersTask: IGetPeersTask;
-    procedure OnTaskCompleted(ATask: ITask; AArgs: ICompleteEventArgs);
+    procedure OnPeersFound(APeers: TArray<IPeer>);
+    procedure HandleTaskLoop(ATask: IFindPeersTask);
   protected
     procedure DoAnnounce; override; final;
     procedure DoRetrack; override; final;
@@ -41,31 +42,46 @@ begin
   FAnnounceTask := AAnnounceTask;
   FGetPeersTask := AGetPeersTask;
 
-  FAnnounceTask.OnCompleted := OnTaskCompleted;
-  FAnnounceTask.OnPeersFound := procedure (APeers: TArray<IPeer>)
-  begin
-    TPrelude.Foreach<IPeer>(APeers, procedure (APeer: IPeer)
-    begin
-      with APeer do
-        ResponsePeerInfo(Host, Port);
-    end);
-  end;
-  FGetPeersTask.OnCompleted := OnTaskCompleted;
+  FAnnounceTask.OnPeersFound := OnPeersFound;
+  FGetPeersTask.OnPeersFound := OnPeersFound;
 end;
 
 procedure TDHTTracker.DoAnnounce;
 begin
-
+  HandleTaskLoop(FAnnounceTask);
 end;
 
 procedure TDHTTracker.DoRetrack;
 begin
-
+  HandleTaskLoop(FGetPeersTask);
 end;
 
-procedure TDHTTracker.OnTaskCompleted(ATask: ITask; AArgs: ICompleteEventArgs);
+procedure TDHTTracker.HandleTaskLoop(ATask: IFindPeersTask);
+var
+  b: Boolean;
 begin
-  ATask.Reset;
+  b := True;
+
+  ATask.OnCompleted := procedure (t: ITask; e: ICompleteEventArgs)
+  begin
+    b := False;
+    t.Reset;
+  end;
+
+  while b do
+    if not ATask.Busy then
+      ATask.Sync
+    else
+      Sleep(1);
+end;
+
+procedure TDHTTracker.OnPeersFound(APeers: TArray<IPeer>);
+begin
+  TPrelude.Foreach<IPeer>(APeers, procedure (APeer: IPeer)
+  begin
+    with APeer do
+      ResponsePeerInfo(Host, Port);
+  end);
 end;
 
 end.
