@@ -604,6 +604,19 @@ type
     function Push(AIndex: Integer): Boolean;
   end;
 
+  IMagnetLink = interface
+  ['{EF001EFC-18CD-4884-91BE-250ABB276DA8}']
+    function GetInfoHash: TUniString;
+    function GetDisplayName: string;
+    function GetTrackers: TEnumerable<string>;
+    function GetTrackersCount: Integer;
+
+    property InfoHash: TUniString read GetInfoHash;
+    property DisplayName: string read GetDisplayName;
+    property Trackers: TEnumerable<string> read GetTrackers;
+    property TrackersCount: Integer read GetTrackersCount;
+  end;
+
   ISeeding = interface(IBusy) { раздача, она же и закачка }
   ['{A428EA0C-EF82-4A67-9F74-DF22EC858D20}']
     function GetLastRequest: TDateTime;
@@ -689,7 +702,7 @@ type
     procedure AddPeer(const AInfoHash: TUniString; const AHost: string;
       APort: TIdPort; AIPVer: TIdIPVersion = Id_IPv4);
 
-    function AddMagnet(const AMagnet: string;
+    function AddMagnet(const AMagnetURL: string;
       const ADownloadPath: string): ISeeding;
     function AddTorrent(const ATorrentData: TUniString;
       const ADownloadPath: string): ISeeding; overload;
@@ -755,7 +768,9 @@ type
     procedure AddPeer(const AInfoHash: TUniString; const AHost: string;
       APort: TIdPort; AIPVer: TIdIPVersion = Id_IPv4);
 
-    function AddMagnet(const AMagnet: string;
+    procedure RegisterSeeding(ASeeding: ISeeding);
+
+    function AddMagnet(const AMagnetURL: string;
       const ADownloadPath: string): ISeeding; inline;
     function AddTorrent(const ATorrentData: TUniString;
       const ADownloadPath: string): ISeeding; overload; inline;
@@ -803,7 +818,7 @@ implementation
 
 uses
   Bittorrent.Server, Bittorrent.Seeding, Bittorrent.MetaFile, Bittorrent.Messages,
-  Bittorrent.Peer, Bittorrent.Connection, Bittorrent.Counter;
+  Bittorrent.Peer, Bittorrent.Connection, Bittorrent.Counter, Bittorrent.MagnetLink;
 
 { TMessageIDHelper }
 
@@ -840,10 +855,24 @@ end;
 
 { TBittorrent }
 
-function TBittorrent.AddMagnet(const AMagnet, ADownloadPath: string): ISeeding;
+function TBittorrent.AddMagnet(const AMagnetURL, ADownloadPath: string): ISeeding;
+var
+  ml: IMagnetLink;
 begin
-//  Result := AddSeeding(TMetaFile.Create(ATorrentData), ABitField, ADownloadPath,
-//    AStates);
+  Lock;
+  try
+    ml := TMagnetLink.Create(AMagnetURL);
+
+    if not FSeedings.TryGetValue(ml.InfoHash, Result) then
+    begin
+      Result := TSeeding.Create(ADownloadPath, FThreads, FClientID, ml.InfoHash,
+        FListenPort);
+
+      RegisterSeeding(Result);
+    end;
+  finally
+    Unlock;
+  end;
 end;
 
 procedure TBittorrent.AddPeer(const AInfoHash: TUniString; const AHost: string;
@@ -862,6 +891,14 @@ begin
   finally
     Unlock;
   end;
+end;
+
+procedure TBittorrent.RegisterSeeding(ASeeding: ISeeding);
+begin
+  ASeeding.OnUpdateCounter := OnSeedingUpdateCounter;
+  ASeeding.OnDelete := OnSeedingDelete;
+
+  FSeedings.Add(ASeeding.InfoHash, ASeeding);
 end;
 
 procedure TBittorrent.AddToBlackList(AHost: string);
@@ -894,10 +931,7 @@ begin
       Result := TSeeding.Create(ADownloadPath, FThreads, FClientID, mf,
         TBitField.FromUniString(ABitField), AStates, FListenPort);
 
-      Result.OnUpdateCounter := OnSeedingUpdateCounter;
-      Result.OnDelete := OnSeedingDelete;
-
-      FSeedings.Add(mf.InfoHash, Result);
+      RegisterSeeding(Result);
     end;
   finally
     Unlock;

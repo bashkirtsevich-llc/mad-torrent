@@ -3,7 +3,7 @@ program mtp;
 uses
   System.StartUpCopy,
   FMX.Forms,
-  Forms.Main in 'Forms.Main.pas' {Form1},
+  Forms.Main in 'Forms.Main.pas' {frmMain},
   Basic.Bencoding in 'basic\Basic.Bencoding.pas',
   Basic.BigInteger in 'basic\Basic.BigInteger.pas',
   Basic.UniString in 'basic\Basic.UniString.pas',
@@ -48,12 +48,13 @@ uses
   IdIOHandlerHelper in 'indy\IdIOHandlerHelper.pas',
   Bittorrent.Extensions in 'bittorrent\Bittorrent.Extensions.pas',
   Bittorrent.Tracker.HTTP in 'bittorrent\Bittorrent.Tracker.HTTP.pas',
-  Bittorrent.Tracker.DHT in 'bittorrent\Bittorrent.Tracker.DHT.pas';
+  Bittorrent.Tracker.DHT in 'bittorrent\Bittorrent.Tracker.DHT.pas',
+  Bittorrent.MagnetLink in 'bittorrent\Bittorrent.MagnetLink.pas';
 
 {$R *.res}
 
 begin
   Application.Initialize;
-  Application.CreateForm(TForm1, Form1);
+  Application.CreateForm(TfrmMain, frmMain);
   Application.Run;
 end.

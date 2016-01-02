@@ -219,6 +219,8 @@ type
     procedure Lock; inline;
     procedure Unlock; inline;
 
+    procedure InitMetadata(AMetafile: IMetaFile);
+
     procedure DisconnectAllPeers;
     function ApplyPeerCallbacks(APeer: IPeer): IPeer;
     procedure RemovePeerCallbacks(APeer: IPeer); inline;
@@ -233,8 +235,12 @@ type
     procedure PrepareWritePiece(APiece: IPiece); virtual;
   public
     constructor Create(const ADownloadPath: string; AThreadPoolEx: TThreadPool;
+      const AClientID, AInfoHash: TUniString; AListenPort: TIdPort); reintroduce; overload;
+
+    constructor Create(const ADownloadPath: string; AThreadPoolEx: TThreadPool;
       const AClientID: TUniString; AMetafile: IMetaFile;
-      const ABitField: TBitField; AStates: TSeedingStates; AListenPort: TIdPort);
+      const ABitField: TBitField; AStates: TSeedingStates;
+      AListenPort: TIdPort); reintroduce; overload;
     destructor Destroy; override;
   end;
 
@@ -335,9 +341,29 @@ end;
 constructor TSeeding.Create(const ADownloadPath: string;
   AThreadPoolEx: TThreadPool; const AClientID: TUniString; AMetafile: IMetaFile;
   const ABitField: TBitField; AStates: TSeedingStates; AListenPort: TIdPort);
-var
-  it: IFileItem;
-  //s: string;
+begin
+  Assert(Assigned(AMetafile));
+
+  Create(ADownloadPath, AThreadPoolEx, AClientID, AMetafile.InfoHash, AListenPort);
+
+  { init metadata }
+  InitMetadata(AMetafile);
+
+  FStates := AStates + [ssHaveMetadata]; // переприсваиваем состояние раздачи
+
+  { установка битфилдов и всего прочего }
+  FBitField.CopyFrom(ABitField);
+
+  if FBitField.AllFalse then
+    FBitField := FFileSystem.CheckFiles;
+
+  if FBitField.AllTrue then
+    FStates := FStates + [ssCompleted] - [ssActive, ssDownloading]
+end;
+
+constructor TSeeding.Create(const ADownloadPath: string;
+  AThreadPoolEx: TThreadPool; const AClientID, AInfoHash: TUniString;
+  AListenPort: TIdPort);
 begin
   inherited Create;
 
@@ -345,74 +371,24 @@ begin
   FOverageCount   := 0;
   FThreadPool     := AThreadPoolEx;
   FClientID       := AClientID;
-  FMetafile       := AMetafile;
-  FLastRequest    := Now;
   FLastCacheClear := Now;
-  FInfoHash.Assign(AMetafile.InfoHash);
+  FInfoHash.Assign(AInfoHash);
   FDownloadPath   := ADownloadPath;
+  FListenPort     := AListenPort;
+  FStates         := [ssDownloading];
 
   FCounter        := TCounter.Create;
-
   FLock           := TObject.Create;
-
   FPeers          := TList<IPeer>.Create;
   FTrackers       := TList<ITracker>.Create;
-  FListenPort     := AListenPort;
-
-  {for s in FMetafile.Trackers do
-    FTrackers.Add(CreateTracker(s, AListenPort));}
-
   FItems          := TList<ISeedingItem>.Create;
-  for it in FMetafile.Files do
-    FItems.Add(TSeedingItem.Create(ADownloadPath, it, AMetafile.PiecesLength,
-      OnGetBitField, OnGetState, OnRequire));
+  FPiecesBuf      := TDictionary<Integer, IPiece>.Create;
 
-  FPiecesBuf      := System.Generics.Collections.TDictionary<Integer, IPiece>.Create;
-  FPiecePicker    := TRequestFirstPicker.Create(
-      TPriorityPicker.Create(
-        TRarestFirstPicker.Create(
-          TRandomPicker.Create(
-            TLinearPicker.Create(nil, 1),
-          10),
-        20),
-      30, FItems),
-    30);
+  FBitField       := TBitField.Create(0);
+  FPeersHave      := TBitSum.Create(0);
 
-  FFileSystem     := CreateFileSystem(AMetafile, ADownloadPath);
-
-  FBitField       := TBitField.Create(AMetafile.PiecesCount);
-  FBitField.CopyFrom(ABitField);
-
-  { если закачка с нуля, проверяем файлы в папке назначения }
-  if FBitField.AllFalse then
-    FBitField     := FFileSystem.CheckFiles;
-
-  FPeersHave      := TBitSum.Create(FBitField.Len);
-
-  FDownloadQueue:= TDownloadPieceQueue.Create(AMetafile.PiecesCount, CancelReuests,
-    CancelReuests);
+  FDownloadQueue  := TDownloadPieceQueue.Create(0, nil, nil);
   FUploadQueue    := TUploadPieceQueue.Create;
-
-  if AStates = [] then
-  begin
-    FStates   := [ssHaveMetadata];
-
-    if FBitField.AllTrue then
-      FStates := FStates + [ssCompleted] - [ssDownloading] { всё загружено, переводить в активный режим нет смысла }
-    else
-      FStates := FStates + [ssActive, ssDownloading] - [ssCompleted]; { загружается }
-  end else
-    FStates := AStates;
-
-  FLastRequest    := Now;
-
-  FMetafileMap    := TSortedList<Integer, TUniString>.Create(
-    TDelegatedComparer<Integer>.Create(
-      function (const Left, Right: Integer): Integer
-      begin
-        Result  := Left - Right;
-      end) as IComparer<Integer>
-  );
 end;
 
 function TSeeding.CreateFileSystem(AMetaFile: IMetaFile;
@@ -534,6 +510,52 @@ end;
 function TSeeding.GetTrackersCount: Integer;
 begin
   Result := FTrackers.Count;
+end;
+
+procedure TSeeding.InitMetadata(AMetafile: IMetaFile);
+var
+  it: IFileItem;
+  {s: string;}
+begin
+  Assert(Assigned(AMetafile));
+
+  Lock;
+  try
+    FMetafile := AMetafile;
+
+    // трекеры надо отдельным параметром передавать
+    {for s in AMetafile.Trackers do
+      FTrackers.Add(CreateTracker(s, FListenPort));}
+
+    for it in AMetafile.Files do
+      FItems.Add(TSeedingItem.Create(FDownloadPath, it, AMetafile.PiecesLength,
+        OnGetBitField, OnGetState, OnRequire));
+
+    FPiecePicker    := TRequestFirstPicker.Create(
+        TPriorityPicker.Create(
+          TRarestFirstPicker.Create(
+            TRandomPicker.Create(
+              TLinearPicker.Create(nil, 1),
+            10),
+          20),
+        30, FItems),
+      30
+    );
+
+    FFileSystem     := CreateFileSystem(AMetafile, FDownloadPath);
+
+    FBitField       := TBitField.Create(AMetafile.PiecesCount);
+    FPeersHave      := TBitSum.Create(FBitField.Len);
+
+    FDownloadQueue  := TDownloadPieceQueue.Create(AMetafile.PiecesCount,
+      CancelReuests, CancelReuests);
+
+    FStates         := [ssHaveMetadata, ssActive, ssDownloading] - [ssCompleted]; { загружается }
+
+    FLastRequest    := Now;
+  finally
+    Unlock;
+  end;
 end;
 
 function TSeeding.GetCounter: ICounter;
