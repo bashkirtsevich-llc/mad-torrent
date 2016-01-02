@@ -147,6 +147,7 @@
         <DCCReference Include="indy\IdIOHandlerHelper.pas"/>
         <DCCReference Include="bittorrent\Bittorrent.Extensions.pas"/>
         <DCCReference Include="bittorrent\Bittorrent.Tracker.HTTP.pas"/>
+        <DCCReference Include="bittorrent\Bittorrent.Tracker.DHT.pas"/>
         <BuildConfiguration Include="Release">
             <Key>Cfg_2</Key>
             <CfgParent>Base</CfgParent>
