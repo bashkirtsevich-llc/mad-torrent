@@ -19,7 +19,7 @@ type
   private
     FAnnounceTask: IAnnounceTask;
     FGetPeersTask: IGetPeersTask;
-    procedure OnPeersFound(APeers: TArray<IPeer>);
+    procedure OnPeersFound(APeers: TArray<DHT.IPeer>);
     procedure HandleTaskLoop(ATask: IFindPeersTask);
   protected
     procedure DoAnnounce; override; final;
@@ -36,8 +36,8 @@ implementation
 constructor TDHTTracker.Create(AThreadPool: TThreadPool;
   AAnnounceTask: IAnnounceTask; AGetPeersTask: IGetPeersTask);
 begin
-  inherited Create(AThreadPool, AAnnounceTask.InfoHash, AAnnounceTask.Port,
-    DefaultAnnounceInterval, DefaultRetrackInterval);
+  inherited Create(AThreadPool, AAnnounceTask.InfoHash.AsUniString,
+    AAnnounceTask.Port, DefaultAnnounceInterval, DefaultRetrackInterval);
 
   FAnnounceTask := AAnnounceTask;
   FGetPeersTask := AGetPeersTask;
@@ -75,9 +75,9 @@ begin
       Sleep(1);
 end;
 
-procedure TDHTTracker.OnPeersFound(APeers: TArray<IPeer>);
+procedure TDHTTracker.OnPeersFound(APeers: TArray<DHT.IPeer>);
 begin
-  TPrelude.Foreach<IPeer>(APeers, procedure (APeer: IPeer)
+  TPrelude.Foreach<DHT.IPeer>(APeers, procedure (APeer: DHT.IPeer)
   begin
     with APeer do
       ResponsePeerInfo(Host, Port);
