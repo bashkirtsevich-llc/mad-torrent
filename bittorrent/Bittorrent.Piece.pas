@@ -16,24 +16,19 @@ type
     FIndex: Integer; { индекс куска }
     FPieceLength: Integer; { размер куска }
     FBlocks: TDictionary<Integer, TUniString>; { список блоков (каждый по 16кб) }
-    FHashTree: TUniString;
 
     function GetCompleted: Boolean;
     procedure AddBlock(AOffset: Integer; const AData: TUniString);
     function GetData: TUniString;
     function GetPieceLength: Integer; inline;
     function GetIndex: Integer; inline;
-    function GetHashTree: TUniString; inline;
-    procedure SetHashTree(const Value: TUniString); inline;
     procedure EnumBlocks(ACallBack: TProc<Integer, Integer>); overload; inline;
   public
     class procedure EnumBlocks(APieceLength: Integer;
       ACallBack: TProc<Integer, Integer>); overload;
   public
     constructor Create(AIndex, APieceLength, AOffset: Integer;
-      const AData: TUniString); overload;
-    constructor Create(AIndex, APieceLength, AOffset: Integer;
-      const AData, AHashTree: TUniString); overload;
+      const AData: TUniString); reintroduce;
     destructor Destroy; override;
   end;
 
@@ -48,23 +43,16 @@ begin
 end;
 
 constructor TPiece.Create(AIndex, APieceLength, AOffset: Integer;
-  const AData, AHashTree: TUniString);
+  const AData: TUniString);
 begin
   inherited Create;
 
   FIndex        := AIndex;
   FPieceLength  := APieceLength;
   FBlocks       := System.Generics.Collections.TDictionary<Integer, TUniString>.Create;
-  FHashTree.Assign(AHashTree);
 
   Assert((AData.Len > 0) and (AData.Len <= APieceLength));
   AddBlock(AOffset, AData);
-end;
-
-constructor TPiece.Create(AIndex, APieceLength, AOffset: Integer;
-  const AData: TUniString);
-begin
-  Create(AIndex, APieceLength, AOffset, AData, '');
 end;
 
 destructor TPiece.Destroy;
@@ -111,11 +99,6 @@ begin
     Result.Insert(offset, FBlocks[offset]);
 end;
 
-function TPiece.GetHashTree: TUniString;
-begin
-  Result := FHashTree;
-end;
-
 function TPiece.GetIndex: Integer;
 begin
   Result := FIndex;
@@ -136,11 +119,6 @@ end;
 function TPiece.GetPieceLength: Integer;
 begin
   Result := FPieceLength;
-end;
-
-procedure TPiece.SetHashTree(const Value: TUniString);
-begin
-  FHashTree.Assign(Value);
 end;
 
 end.

@@ -212,7 +212,7 @@ type
     procedure OnPeerRequest(APeer: IPeer; APieceIndex, AOffset, ASize: Integer);
     procedure OnPeerCancel(APeer: IPeer; APieceIndex, AOffset: Integer);
     procedure OnPeerPiece(APeer: IPeer; APieceIndex, AOffset: Integer;
-      AHash, AData: TUniString);
+      AData: TUniString);
     procedure OnPeerChoke(APeer: IPeer);
     procedure OnPeerInterest(APeer: IPeer);
 
@@ -231,8 +231,6 @@ type
       AIPVer: TIdIPVersion): IPeer; virtual;
     function CreateFileSystem(AMetaFile: IMetaFile;
       const ADownloadFolder: string): IFileSystem; virtual;
-
-    procedure PrepareWritePiece(APiece: IPiece); virtual;
   public
     constructor Create(const ADownloadPath: string; AThreadPoolEx: TThreadPool;
       const AClientID, AInfoHash: TUniString; AListenPort: TIdPort); reintroduce; overload;
@@ -748,7 +746,7 @@ begin
 end;
 
 procedure TSeeding.OnPeerPiece(APeer: IPeer; APieceIndex, AOffset: Integer;
-  AHash, AData: TUniString);
+  AData: TUniString);
 var
   p: IPiece;
   it: IPeer;
@@ -779,14 +777,9 @@ begin
       FPiecesBuf.Add(APieceIndex, p);
     end;
 
-    // hash
-    if (AHash.Len > 0) and (p.HashTree.Len = 0) then
-      p.HashTree := AHash;
-
     if p.Completed then
     try
       try
-        PrepareWritePiece(p);
         FFileSystem.PieceWrite(p);
       except
         on E: EFileSystemWriteException do
@@ -898,11 +891,6 @@ begin
   finally
     Unlock;
   end;
-end;
-
-procedure TSeeding.PrepareWritePiece(APiece: IPiece);
-begin
-  Assert(not APiece.HashTree.Empty);
 end;
 
 procedure TSeeding.CancelReuests(APiece: Integer; APeer: IPeer);

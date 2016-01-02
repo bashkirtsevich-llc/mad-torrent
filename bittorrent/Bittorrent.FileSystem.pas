@@ -370,8 +370,7 @@ begin
 
     Assert(buf.Len = got, 'Unexpected buffer size');
 
-    Result := TPiece.Create(APieceIndex, buf.Len, 0, buf,
-      FMetaFile.PieceHash[APieceIndex]);
+    Result := TPiece.Create(APieceIndex, buf.Len, 0, buf);
   finally
     Unlock;
   end;

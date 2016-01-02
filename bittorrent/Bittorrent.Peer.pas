@@ -36,7 +36,7 @@ type
     FOnStart: TProc<IPeer, TUniString, TBitField>;
     FOnHave: TProc<IPeer, Integer>;
     FOnRequestPiece: TProc<IPeer, Integer, Integer, Integer>;
-    FOnPiece: TPieceProc;
+    FOnPiece: TProc<IPeer, Integer, Integer, TUniString>;
     FOnCancel: TProc<IPeer, Integer, Integer>;
     FOnException: TProc<IPeer, Exception>;
     FOnUpdateCounter: TProc<IPeer, UInt64, UInt64>;
@@ -74,8 +74,8 @@ type
     procedure SetOnHave(Value: TProc<IPeer, Integer>); inline;
     function GetOnRequest: TProc<IPeer, Integer, Integer, Integer>; inline;
     procedure SetOnRequest(Value: TProc<IPeer, Integer, Integer, Integer>); inline;
-    function GetOnPiece: TPieceProc; inline;
-    procedure SetOnPiece(Value: TPieceProc); inline;
+    function GetOnPiece: TProc<IPeer, Integer, Integer, TUniString>; inline;
+    procedure SetOnPiece(Value: TProc<IPeer, Integer, Integer, TUniString>); inline;
     function GetOnCancel: TProc<IPeer, Integer, Integer>; inline;
     procedure SetOnCancel(Value: TProc<IPeer, Integer, Integer>); inline;
     function GetOnException: TProc<IPeer, Exception>; inline;
@@ -122,8 +122,7 @@ type
     procedure DoHave(APieceIndex: Integer); inline;
     procedure DoStart(const ABitField: TBitField); inline;
     procedure DoRequest(APieceIndex, AOffset, ASize: Integer); inline;
-    procedure DoPiece(APieceIndex, AOffset: Integer;
-      const AHash, ABlock: TUniString); inline;
+    procedure DoPiece(APieceIndex, AOffset: Integer; const ABlock: TUniString); inline;
     procedure DoCancel(APieceIndex, AOffset: Integer); inline;
     procedure DoDisconnect;
   protected
@@ -359,7 +358,7 @@ begin
   Result := FOnNotInterest;
 end;
 
-function TPeer.GetOnPiece: TPieceProc;
+function TPeer.GetOnPiece: TProc<IPeer, Integer, Integer, TUniString>;
 begin
   Result := FOnPiece;
 end;
@@ -578,7 +577,7 @@ begin
   FOnNotInterest := Value;
 end;
 
-procedure TPeer.SetOnPiece(Value: TPieceProc);
+procedure TPeer.SetOnPiece(Value: TProc<IPeer, Integer, Integer, TUniString>);
 begin
   FOnPiece := Value;
 end;
@@ -650,7 +649,7 @@ begin
         DoRequest(PieceIndex, Offset, Size);
     idPiece         :  { прислали блок/кусок }
       with (AMessage as IPieceMessage) do
-        DoPiece(PieceIndex, Offset, '', Block);
+        DoPiece(PieceIndex, Offset, Block);
     idCancel        :  { отменяет свой запрос }
       with (AMessage as ICancelMessage) do
         DoCancel(PieceIndex, Offset);
@@ -697,11 +696,10 @@ begin
   end;
 end;
 
-procedure TPeer.DoPiece(APieceIndex, AOffset: Integer;
-  const AHash, ABlock: TUniString);
+procedure TPeer.DoPiece(APieceIndex, AOffset: Integer; const ABlock: TUniString);
 begin
   if Assigned(FOnPiece) then
-    FOnPiece(Self, APieceIndex, AOffset, AHash, ABlock);
+    FOnPiece(Self, APieceIndex, AOffset, ABlock);
 end;
 
 procedure TPeer.DoRequest(APieceIndex, AOffset, ASize: Integer);

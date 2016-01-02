@@ -282,11 +282,6 @@ type
   TPeerFlag = (pfWeChoke, pfWeInterested, pfTheyChoke, pfTheyInterested);
   TPeerFlags = set of TPeerFlag;
 
-  IPeer = interface;
-
-  TPieceProc = reference to procedure (APeer: IPeer; APieceIndex, AOffset: Integer;
-    AHash, ABlock: TUniString);
-
   IPeer = interface(IBusy)
   ['{C19B9DFA-B91E-4302-8FE2-BB8F6B18E62B}']
     {$REGION 'selectors/modificators'}
@@ -316,8 +311,8 @@ type
     procedure SetOnRequest(Value: TProc<IPeer, Integer, Integer, Integer>);
     function GetOnCancel: TProc<IPeer, Integer, Integer>;
     procedure SetOnCancel(Value: TProc<IPeer, Integer, Integer>);
-    function GetOnPiece: TPieceProc;
-    procedure SetOnPiece(Value: TPieceProc);
+    function GetOnPiece: TProc<IPeer, Integer, Integer, TUniString>;
+    procedure SetOnPiece(Value: TProc<IPeer, Integer, Integer, TUniString>);
     function GetOnException: TProc<IPeer, Exception>;
     procedure SetOnException(Value: TProc<IPeer, Exception>);
     function GetOnUpdateCounter: TProc<IPeer, UInt64, UInt64>;
@@ -378,7 +373,7 @@ type
       read GetOnRequest write SetOnRequest;
     property OnCancel: TProc<IPeer, Integer, Integer>
       read GetOnCancel write SetOnCancel;
-    property OnPiece: TPieceProc read GetOnPiece write SetOnPiece;
+    property OnPiece: TProc<IPeer, Integer, Integer, TUniString> read GetOnPiece write SetOnPiece;
     property OnException: TProc<IPeer, Exception> read GetOnException write SetOnException;
     property OnUpdateCounter: TProc<IPeer, UInt64, UInt64> read GetOnUpdateCounter write SetOnUpdateCounter;
   end;
@@ -485,11 +480,8 @@ type
     function GetData: TUniString;
     function GetPieceLength: Integer;
     function GetIndex: Integer;
-    function GetHashTree: TUniString;
-    procedure SetHashTree(const Value: TUniString);
 
     procedure AddBlock(AOffset: Integer; const AData: TUniString);
-    //function GetBlock(AOffset, ALength: Integer): TUniString;
 
     procedure EnumBlocks(ACallBack: TProc<Integer, Integer>);
 
@@ -497,7 +489,6 @@ type
     property Data: TUniString read GetData;
     property PieceLength: Integer read GetPieceLength;
     property Index: Integer read GetIndex;
-    property HashTree: TUniString read GetHashTree write SetHashTree;
   end;
 
   IFileSystem = interface
