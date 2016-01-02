@@ -760,10 +760,7 @@ type
     function AddTorrent(const ATorrentData: TUniString;
       const ADownloadPath: string): ISeeding; overload; inline;
     function AddTorrent(const ATorrentData, ABitField: TUniString;
-      const ADownloadPath: string; AStates: TSeedingStates): ISeeding; overload; inline;
-
-    function AddSeeding(AMetaFile: IMetaFile; const ABitField: TUniString;
-      const ADownloadPath: string; AStates: TSeedingStates): ISeeding;
+      const ADownloadPath: string; AStates: TSeedingStates): ISeeding; overload;
 
     function ContainsUnit(const AInfoHash: TUniString): Boolean; inline;
 
@@ -843,31 +840,10 @@ end;
 
 { TBittorrent }
 
-function TBittorrent.AddSeeding(AMetaFile: IMetaFile; const ABitField: TUniString;
-  const ADownloadPath: string; AStates: TSeedingStates): ISeeding;
-begin
-  Lock;
-  try
-    if FSeedings.ContainsKey(AMetaFile.InfoHash) then
-      Result := FSeedings[AMetaFile.InfoHash]
-    else
-    begin
-      Result := TSeeding.Create(ADownloadPath, FThreads, FClientID,
-        AMetaFile, TBitField.FromUniString(ABitField), AStates, FListenPort);
-
-      FSeedings.Add(AMetaFile.InfoHash, Result);
-    end;
-
-    Result.OnUpdateCounter := OnSeedingUpdateCounter;
-    Result.OnDelete := OnSeedingDelete;
-  finally
-    Unlock;
-  end;
-end;
-
 function TBittorrent.AddMagnet(const AMagnet, ADownloadPath: string): ISeeding;
 begin
-
+//  Result := AddSeeding(TMetaFile.Create(ATorrentData), ABitField, ADownloadPath,
+//    AStates);
 end;
 
 procedure TBittorrent.AddPeer(const AInfoHash: TUniString; const AHost: string;
@@ -906,9 +882,26 @@ end;
 
 function TBittorrent.AddTorrent(const ATorrentData, ABitField: TUniString;
   const ADownloadPath: string; AStates: TSeedingStates): ISeeding;
+var
+  mf: IMetaFile;
 begin
-  Result := AddSeeding(TMetaFile.Create(ATorrentData), ABitField, ADownloadPath,
-    AStates);
+  Lock;
+  try
+    mf := TMetaFile.Create(ATorrentData);
+
+    if not FSeedings.TryGetValue(mf.InfoHash, Result) then
+    begin
+      Result := TSeeding.Create(ADownloadPath, FThreads, FClientID, mf,
+        TBitField.FromUniString(ABitField), AStates, FListenPort);
+
+      Result.OnUpdateCounter := OnSeedingUpdateCounter;
+      Result.OnDelete := OnSeedingDelete;
+
+      FSeedings.Add(mf.InfoHash, Result);
+    end;
+  finally
+    Unlock;
+  end;
 end;
 
 function TBittorrent.Blacklisted(AHost: string): Boolean;
