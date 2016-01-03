@@ -4,10 +4,10 @@ interface
 
 uses
   System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
-  System.Math, System.DateUtils,
+  System.Math, System.DateUtils, System.Hash,
   Basic.UniString,
   Bittorrent, Bittorrent.Bitfield, Bittorrent.Counter,
-  Common.BusyObj, Common.SortedList, Common.ThreadPool,
+  Common.BusyObj, Common.SortedList, Common.ThreadPool, Common.SHA1,
   IdGlobal, IdStack;
 
 type
@@ -123,6 +123,7 @@ type
     FLock: TObject;
     FMetafile: IMetaFile;
     FMetafileMap: TSortedList<Integer, TUniString>;
+    FMetadataSize: Integer;
     FInfoHash: TUniString;
     FClientID: TUniString;
     FFileSystem: IFileSystem;
@@ -140,6 +141,7 @@ type
     FBitField: TBitField; // маска загрузки
     FPeersHave: TBitSum; // доступно на пирах
     FItems: TList<ISeedingItem>; // для управления закачкой
+    FOnMetadataLoaded: TProc<ISeeding, IMetaFile>;
     FOnUpdate: TProc<ISeeding>;
     FOnDelete: TProc<ISeeding>;
     FOnUpdateCounter: TProc<ISeeding, UInt64, UInt64>;
@@ -167,6 +169,8 @@ type
     function GetCorruptedSize: UInt64; inline;
     function GetCounter: ICounter; inline;
     function GetDownloadPath: string; inline;
+    function GetOnMetadataLoaded: TProc<ISeeding, IMetaFile>; inline;
+    procedure SetOnMetadataLoaded(const Value: TProc<ISeeding, IMetaFile>); inline;
     function GetOnUpdate: TProc<ISeeding>; inline;
     procedure SetOnUpdate(Value: TProc<ISeeding>); inline;
     function GetOnDelete: TProc<ISeeding>; inline;
@@ -215,6 +219,7 @@ type
       AData: TUniString);
     procedure OnPeerChoke(APeer: IPeer);
     procedure OnPeerInterest(APeer: IPeer);
+    procedure OnPeerExtendedMessage(APeer: IPeer; AMessage: IExtension);
 
     procedure Lock; inline;
     procedure Unlock; inline;
@@ -247,7 +252,7 @@ implementation
 uses
   Bittorrent.Peer, Bittorrent.Messages, Bittorrent.Piece, Bittorrent.MetaFile,
   Bittorrent.PiecePicker, Bittorrent.FileSystem, Bittorrent.SeedingItem,
-  Bittorrent.Tracker;
+  Bittorrent.Tracker, Bittorrent.Extensions;
 
 { TSeeding }
 
@@ -310,17 +315,18 @@ function TSeeding.ApplyPeerCallbacks(APeer: IPeer): IPeer;
 begin
   Result := APeer;
 
-  Result.OnConnect       := OnPeerConnect;
-  Result.OnDisonnect     := OnPeerDisconnect;
-  Result.OnException     := OnPeerException;
-  Result.OnStart         := OnPeerStart;
-  Result.OnRequest       := OnPeerRequest;
-  Result.OnHave          := OnPeerHave;
-  Result.OnCancel        := OnPeerCancel;
-  Result.OnPiece         := OnPeerPiece;
-  Result.OnChoke         := OnPeerChoke;
-  Result.OnInterest      := OnPeerInterest;
-  Result.OnUpdateCounter := UpdateCounter;
+  Result.OnConnect          := OnPeerConnect;
+  Result.OnDisonnect        := OnPeerDisconnect;
+  Result.OnException        := OnPeerException;
+  Result.OnStart            := OnPeerStart;
+  Result.OnRequest          := OnPeerRequest;
+  Result.OnHave             := OnPeerHave;
+  Result.OnCancel           := OnPeerCancel;
+  Result.OnPiece            := OnPeerPiece;
+  Result.OnChoke            := OnPeerChoke;
+  Result.OnInterest         := OnPeerInterest;
+  Result.OnExtendedMessage  := OnPeerExtendedMessage;
+  Result.OnUpdateCounter    := UpdateCounter;
 end;
 
 procedure TSeeding.CancelDownloading;
@@ -520,6 +526,7 @@ begin
   Lock;
   try
     FMetafile := AMetafile;
+    FMetadataSize := AMetafile.Metadata.Len;
 
     // трекеры надо отдельным параметром передавать
     {for s in AMetafile.Trackers do
@@ -604,6 +611,11 @@ end;
 function TSeeding.GetOnDelete: TProc<ISeeding>;
 begin
   Result := FOnDelete;
+end;
+
+function TSeeding.GetOnMetadataLoaded: TProc<ISeeding, IMetaFile>;
+begin
+  Result := FOnMetadataLoaded;
 end;
 
 function TSeeding.GetOnUpdate: TProc<ISeeding>;
@@ -721,6 +733,100 @@ end;
 procedure TSeeding.OnPeerException(APeer: IPeer; AException: Exception);
 begin
   RemovePeer(APeer);
+end;
+
+procedure TSeeding.OnPeerExtendedMessage(APeer: IPeer; AMessage: IExtension);
+var
+  hs: IExtensionHandshake;
+  md: IExtensionMetadata;
+  i, j: Integer;
+  tmp: TUniString;
+  mf: IMetaFile;
+  metadataID: Byte;
+begin
+  Lock;
+  try
+    if Supports(AMessage, IExtensionHandshake, hs) then
+    begin
+      { отсылаем ответный хендшейк }
+      if Assigned(FMetafile)  then
+        FMetadataSize := FMetafile.Metadata.Len;
+
+      APeer.SendExtensionMessage(TExtensionHandshake.Create('MAD-Torrent',
+        FListenPort, FMetadataSize));
+
+      { пробуем запросить метаданные }
+      if (hs.MetadataSize > 0) and not(ssHaveMetadata in FStates) and
+        hs.Supports.TryGetValue(TExtensionMetadata.GetClassSupportName, metadataID) then
+      begin
+        FMetadataSize := hs.MetadataSize;
+        { request all metadata pieces }
+        i := 0;
+        j := 0;
+
+        while j < FMetadataSize do
+        begin
+          if not FMetafileMap.ContainsKey(i) then
+            APeer.SendExtensionMessage(TExtensionMetadata.Create(mmtRequest, i));
+
+          Inc(i);
+          Inc(j, TExtensionMetadata.BlockSize);
+        end;
+      end;
+    end else
+    if Supports(AMessage, IExtensionMetadata, md) then
+    begin
+      { receive, store }
+      case md.MessageType of
+        mmtRequest:
+          begin
+            { they ask us }
+            tmp := FMetafile.Metadata;
+            { проверка правильности указания куска }
+            Assert(md.Piece * TExtensionMetadata.BlockSize <= tmp.Len);
+
+            APeer.SendExtensionMessage(
+              TExtensionMetadata.Create(mmtData, md.Piece,
+                tmp.Copy(md.Piece * TExtensionMetadata.BlockSize,
+                  Min(TExtensionMetadata.BlockSize,
+                      tmp.Len - md.Piece * TExtensionMetadata.BlockSize))
+              )
+            );
+          end;
+
+        mmtData:
+          begin
+            FMetafileMap.Add(md.Piece, md.Metadata);
+            { check infohash }
+            tmp.Len := 0;
+
+            {TODO -oMAD -cMinor : можно на fold заменить}
+            for i in FMetafileMap.Keys do
+              tmp := tmp + FMetafileMap[i].Value;
+
+            if tmp.Len = FMetadataSize then
+            begin
+              if SHA1(tmp) = FInfoHash then
+              begin
+                { успешно загрузили метафайл }
+                mf := TMetaFile.Create(tmp);
+                InitMetadata(mf);
+
+                if Assigned(FOnMetadataLoaded) then
+                  FOnMetadataLoaded(Self, mf);
+              end else
+                FMetadataSize := 0; { метаданные загрузились с ошибкой }
+
+              FMetafileMap.Clear;
+            end;
+          end;
+
+        mmtReject:; { запрос отклонен }
+      end;
+    end;
+  finally
+    Unlock;
+  end;
 end;
 
 procedure TSeeding.OnPeerHave(APeer: IPeer; APieceIndex: Integer);
@@ -962,6 +1068,11 @@ end;
 procedure TSeeding.SetOnDelete(Value: TProc<ISeeding>);
 begin
   FOnDelete := Value;
+end;
+
+procedure TSeeding.SetOnMetadataLoaded(const Value: TProc<ISeeding, IMetaFile>);
+begin
+  FOnMetadataLoaded := Value;
 end;
 
 procedure TSeeding.SetOnUpdate(Value: TProc<ISeeding>);

@@ -174,6 +174,17 @@ type
     property SupportName: string read GetSupportName;
   end;
 
+  TExtensionItem = record
+  private
+    FName: string;
+    FMsgID: Byte;
+  public
+    property Name: string read FName;
+    property MsgID: Byte read FMsgID;
+
+    constructor Create(const AName: string; AMsgID: Byte);
+  end;
+
   IExtensionHandshake = interface(IExtension)
   ['{B8188CDB-CFDB-43EB-B8B5-04B245978EBE}']
     function GetClientVersion: string;
@@ -288,6 +299,7 @@ type
     function GetInfoHash: TUniString;
     function GetClientID: TUniString;
     function GetBitfield: TBitField;
+    function GetExtensionSupports: TArray<TExtensionItem>;
     function GetConnectionEstablished: Boolean;
     function GetConnectionConnected: Boolean;
     function GetFlags: TPeerFlags;
@@ -313,6 +325,8 @@ type
     procedure SetOnCancel(Value: TProc<IPeer, Integer, Integer>);
     function GetOnPiece: TProc<IPeer, Integer, Integer, TUniString>;
     procedure SetOnPiece(Value: TProc<IPeer, Integer, Integer, TUniString>);
+    function GetOnExtendedMessage: TProc<IPeer, IExtension>;
+    procedure SetOnExtendedMessage(Value: TProc<IPeer, IExtension>);
     function GetOnException: TProc<IPeer, Exception>;
     procedure SetOnException(Value: TProc<IPeer, Exception>);
     function GetOnUpdateCounter: TProc<IPeer, UInt64, UInt64>;
@@ -337,12 +351,14 @@ type
     procedure SendHave(AIndex: Integer);
     procedure SendBitfield(const ABitfield: TBitField);
     procedure SendPiece(APieceIndex, AOffset: Integer; const ABlock: TUniString);
+    procedure SendExtensionMessage(AExtension: IExtension);
 
     procedure Disconnect;
 
     property InfoHash: TUniString read GetInfoHash;
     property ClientID: TUniString read GetClientID;
     property Bitfield: TBitField read GetBitfield;
+    property ExtensionSupports: TArray<TExtensionItem> read GetExtensionSupports;
     property ConnectionEstablished: Boolean read GetConnectionEstablished; { значит, что связь установлена и подтверждена }
     property ConnectionConnected: Boolean read GetConnectionConnected;
     property Flags: TPeerFlags read GetFlags;
@@ -374,6 +390,7 @@ type
     property OnCancel: TProc<IPeer, Integer, Integer>
       read GetOnCancel write SetOnCancel;
     property OnPiece: TProc<IPeer, Integer, Integer, TUniString> read GetOnPiece write SetOnPiece;
+    property OnExtendedMessage: TProc<IPeer, IExtension> read GetOnExtendedMessage write SetOnExtendedMessage;
     property OnException: TProc<IPeer, Exception> read GetOnException write SetOnException;
     property OnUpdateCounter: TProc<IPeer, UInt64, UInt64> read GetOnUpdateCounter write SetOnUpdateCounter;
   end;
@@ -630,6 +647,8 @@ type
     function GetTotalSize: UInt64;
     function GetCounter: ICounter;
     function GetDownloadPath: string;
+    function GetOnMetadataLoaded: TProc<ISeeding, IMetaFile>;
+    procedure SetOnMetadataLoaded(const Value: TProc<ISeeding, IMetaFile>);
     function GetOnUpdate: TProc<ISeeding>;
     procedure SetOnUpdate(Value: TProc<ISeeding>);
     function GetOnDelete: TProc<ISeeding>;
@@ -673,6 +692,7 @@ type
     property DownloadPath: string read GetDownloadPath;
     property Counter: ICounter read GetCounter;
 
+    property OnMetadataLoaded: TProc<ISeeding, IMetaFile> read GetOnMetadataLoaded write SetOnMetadataLoaded;
     property OnUpdate: TProc<ISeeding> read GetOnUpdate write SetOnUpdate;
     property OnDelete: TProc<ISeeding> read GetOnDelete write SetOnDelete;
     property OnUpdateCounter: TProc<ISeeding, UInt64, UInt64> read GetOnUpdateCounter write SetOnUpdateCounter;
@@ -842,6 +862,14 @@ end;
 function TMetadataMessageTypeHelper.GetAsByte: Byte;
 begin
   Result := MetadataMessageTypeByte[Self];
+end;
+
+{ TExtensionItem }
+
+constructor TExtensionItem.Create(const AName: string; AMsgID: Byte);
+begin
+  FName := AName;
+  FMSgID := AMsgID;
 end;
 
 { TBittorrent }

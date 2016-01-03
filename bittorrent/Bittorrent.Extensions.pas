@@ -74,6 +74,7 @@ type
     function GetMessageType: TMetadataMessageType; inline;
     function GetPiece: Integer; inline;
     function GetMetadata: TUniString; inline;
+    class constructor ClassCreate;
   protected
     procedure Decode(const AData: TUniString); override;
     function GetData: TUniString; override;
@@ -275,6 +276,11 @@ begin
 
   if AMessageType = mmtData then
     FMessageDict.Add(BencodeString(TotalSizeKey), BencodeInteger(APieceData.Len));
+end;
+
+class constructor TExtensionMetadata.ClassCreate;
+begin
+  TExtension.AddExtension(TExtensionMetadata);
 end;
 
 constructor TExtensionMetadata.Create(AMessageType: TMetadataMessageType;

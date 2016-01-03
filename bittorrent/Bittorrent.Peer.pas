@@ -24,6 +24,7 @@ type
     FClientID: TUniString;
     FConnection: IConnection;
     FBitfield: TBitField;
+    FExtensionSupports: TArray<TExtensionItem>;
     FConnectionEstablished: Boolean;
     FFlags: TPeerFlags;
     FThreadPool: TThreadPool;
@@ -38,6 +39,7 @@ type
     FOnRequestPiece: TProc<IPeer, Integer, Integer, Integer>;
     FOnPiece: TProc<IPeer, Integer, Integer, TUniString>;
     FOnCancel: TProc<IPeer, Integer, Integer>;
+    FOnExtendedMessage: TProc<IPeer, IExtension>;
     FOnException: TProc<IPeer, Exception>;
     FOnUpdateCounter: TProc<IPeer, UInt64, UInt64>;
     FLastKeepAlive: TDateTime;
@@ -53,6 +55,7 @@ type
     function GetInfoHash: TUniString; inline;
     function GetClientID: TUniString; inline;
     function GetBitfield: TBitField; inline;
+    function GetExtensionSupports: TArray<TExtensionItem>;
     function GetConnectionEstablished: Boolean; inline;
     function GetConnectionConnected: Boolean; inline;
     function GetFlags: TPeerFlags; inline;
@@ -78,6 +81,8 @@ type
     procedure SetOnPiece(Value: TProc<IPeer, Integer, Integer, TUniString>); inline;
     function GetOnCancel: TProc<IPeer, Integer, Integer>; inline;
     procedure SetOnCancel(Value: TProc<IPeer, Integer, Integer>); inline;
+    function GetOnExtendedMessage: TProc<IPeer, IExtension>;
+    procedure SetOnExtendedMessage(Value: TProc<IPeer, IExtension>);
     function GetOnException: TProc<IPeer, Exception>; inline;
     procedure SetOnException(Value: TProc<IPeer, Exception>); inline;
     function GetOnUpdateCounter: TProc<IPeer, UInt64, UInt64>; inline;
@@ -105,6 +110,7 @@ type
     procedure SendBitfield(const ABitfield: TBitField); inline;
     procedure SendPiece(APieceIndex, AOffset: Integer;
       const ABlock: TUniString); inline;
+    procedure SendExtensionMessage(AExtension: IExtension);
 
     function GetHandshakeMessage: IMessage; inline;
 
@@ -268,6 +274,11 @@ begin
   Result := FConnection.ConnectionType;
 end;
 
+function TPeer.GetExtensionSupports: TArray<TExtensionItem>;
+begin
+  Result := FExtensionSupports;
+end;
+
 function TPeer.GetFlags: TPeerFlags;
 begin
   Result := FFlags;
@@ -343,6 +354,11 @@ begin
   Result := FOnException;
 end;
 
+function TPeer.GetOnExtendedMessage: TProc<IPeer, IExtension>;
+begin
+  Result := FOnExtendedMessage;
+end;
+
 function TPeer.GetOnHave: TProc<IPeer, Integer>;
 begin
   Result := FOnHave;
@@ -408,6 +424,28 @@ begin
   Enter;
   try
     FSendQueue.Enqueue(TBitfieldMessage.Create(ABitfield));
+  finally
+    Leave;
+  end;
+end;
+
+procedure TPeer.SendExtensionMessage(AExtension: IExtension);
+var
+  it: TExtensionItem;
+begin
+  Enter;
+  try
+    {TODO -oMAD -cMedium : вносить хендшейковский идентификатор в список}
+    if Supports(AExtension, IExtensionHandshake) then
+      FSendQueue.Enqueue(TExtensionMessage.Create(TExtensionMessage.HandshakeMsgID,
+        AExtension))
+    else
+      for it in FExtensionSupports do
+        if it.Name.Equals(AExtension.SupportName) then
+        begin
+          FSendQueue.Enqueue(TExtensionMessage.Create(it.MsgID, AExtension));
+          Break;
+        end;
   finally
     Leave;
   end;
@@ -560,6 +598,11 @@ end;
 procedure TPeer.SetOnException(Value: TProc<IPeer, Exception>);
 begin
   FOnException := Value;
+end;
+
+procedure TPeer.SetOnExtendedMessage(Value: TProc<IPeer, IExtension>);
+begin
+  FOnExtendedMessage := Value;
 end;
 
 procedure TPeer.SetOnHave(Value: TProc<IPeer, Integer>);
