@@ -182,7 +182,7 @@ type
     class function ClassMessageID: TMessageID; override; final;
   public
     constructor Create(AMessageID: Byte; AExtendedMsgData: TUniString); overload;
-    constructor Create(ASupportsDict: TDictionary<string, Byte>; AExtendedMsg: IExtension); overload;
+    constructor Create(AMessageID: Byte; AExtendedMsg: IExtension); overload;
   end;
 
   TKeepAliveMessage = class(TMessage, IKeepAliveMessage)
@@ -649,20 +649,9 @@ begin
   FMessageData.Assign(AExtendedMsgData);
 end;
 
-constructor TExtensionMessage.Create(ASupportsDict: TDictionary<string, Byte>;
-  AExtendedMsg: IExtension);
+constructor TExtensionMessage.Create(AMessageID: Byte; AExtendedMsg: IExtension);
 begin
-  inherited Create;
-
-  if Supports(AExtendedMsg, IExtensionHandshake) then
-    FMessageID := HandshakeMsgID
-  else
-  begin
-    Assert(Assigned(ASupportsDict));
-    Assert(ASupportsDict.ContainsKey(AExtendedMsg.SupportName));
-
-    FMessageID := ASupportsDict[AExtendedMsg.SupportName];
-  end;
+  Create(AMessageID, AExtendedMsg.Data);
   FExtendedMsg := AExtendedMsg;
 end;
 

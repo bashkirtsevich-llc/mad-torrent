@@ -39,6 +39,7 @@ type
     FOnRequestPiece: TProc<IPeer, Integer, Integer, Integer>;
     FOnPiece: TProc<IPeer, Integer, Integer, TUniString>;
     FOnCancel: TProc<IPeer, Integer, Integer>;
+    FOnPort: TProc<IPeer, TIdPort>;
     FOnExtendedMessage: TProc<IPeer, IExtension>;
     FOnException: TProc<IPeer, Exception>;
     FOnUpdateCounter: TProc<IPeer, UInt64, UInt64>;
@@ -81,6 +82,8 @@ type
     procedure SetOnPiece(Value: TProc<IPeer, Integer, Integer, TUniString>); inline;
     function GetOnCancel: TProc<IPeer, Integer, Integer>; inline;
     procedure SetOnCancel(Value: TProc<IPeer, Integer, Integer>); inline;
+    function GetOnPort: TProc<IPeer, TIdPort>; inline;
+    procedure SetOnPort(Value: TProc<IPeer, TIdPort>); inline;
     function GetOnExtendedMessage: TProc<IPeer, IExtension>;
     procedure SetOnExtendedMessage(Value: TProc<IPeer, IExtension>);
     function GetOnException: TProc<IPeer, Exception>; inline;
@@ -131,6 +134,8 @@ type
     procedure DoRequest(APieceIndex, AOffset, ASize: Integer); inline;
     procedure DoPiece(APieceIndex, AOffset: Integer; const ABlock: TUniString); inline;
     procedure DoCancel(APieceIndex, AOffset: Integer); inline;
+    procedure DoPort(APort: TIdPort); inline;
+    procedure DoExtendedMessage(AExtension: IExtension); inline;
     procedure DoDisconnect;
   protected
     procedure DoSync; override; final;
@@ -378,6 +383,11 @@ end;
 function TPeer.GetOnPiece: TProc<IPeer, Integer, Integer, TUniString>;
 begin
   Result := FOnPiece;
+end;
+
+function TPeer.GetOnPort: TProc<IPeer, TIdPort>;
+begin
+  Result := FOnPort;
 end;
 
 function TPeer.GetOnRequest: TProc<IPeer, Integer, Integer, Integer>;
@@ -636,6 +646,11 @@ begin
   FOnPiece := Value;
 end;
 
+procedure TPeer.SetOnPort(Value: TProc<IPeer, TIdPort>);
+begin
+  FOnPort := Value;
+end;
+
 procedure TPeer.SetOnRequest(Value: TProc<IPeer, Integer, Integer, Integer>);
 begin
   FOnRequestPiece := Value;
@@ -679,6 +694,12 @@ begin
     FOnDisonnect(Self);
 end;
 
+procedure TPeer.DoExtendedMessage(AExtension: IExtension);
+begin
+  if Assigned(FOnExtendedMessage) then
+    FOnExtendedMessage(Self, AExtension);
+end;
+
 procedure TPeer.DoHandleMessage(AMessage: IMessage);
 begin
   Assert(Supports(AMessage, IFixedMessage));
@@ -707,10 +728,12 @@ begin
     idCancel        :  { отменяет свой запрос }
       with (AMessage as ICancelMessage) do
         DoCancel(PieceIndex, Offset);
-    idPort          : ;{ для DHT }
-    idExtended      : ;
-//      with (AMessage as IBTExtensionMessage) do
-//        DoExtended(Extension);
+    idPort          :
+      with (AMessage as IPortMessage) do
+        DoPort(Port);
+    idExtended      :
+      with (AMessage as IExtensionMessage) do
+        DoExtendedMessage(Extension);
   else
     raise Exception.Create('Unknown message');
   end;
@@ -754,6 +777,12 @@ procedure TPeer.DoPiece(APieceIndex, AOffset: Integer; const ABlock: TUniString)
 begin
   if Assigned(FOnPiece) then
     FOnPiece(Self, APieceIndex, AOffset, ABlock);
+end;
+
+procedure TPeer.DoPort(APort: TIdPort);
+begin
+  if Assigned(FOnPort) then
+    FOnPort(Self, APort);
 end;
 
 procedure TPeer.DoRequest(APieceIndex, AOffset, ASize: Integer);

@@ -325,6 +325,8 @@ type
     procedure SetOnCancel(Value: TProc<IPeer, Integer, Integer>);
     function GetOnPiece: TProc<IPeer, Integer, Integer, TUniString>;
     procedure SetOnPiece(Value: TProc<IPeer, Integer, Integer, TUniString>);
+    function GetOnPort: TProc<IPeer, TIdPort>;
+    procedure SetOnPort(Value: TProc<IPeer, TIdPort>);
     function GetOnExtendedMessage: TProc<IPeer, IExtension>;
     procedure SetOnExtendedMessage(Value: TProc<IPeer, IExtension>);
     function GetOnException: TProc<IPeer, Exception>;
@@ -391,6 +393,7 @@ type
     property OnCancel: TProc<IPeer, Integer, Integer>
       read GetOnCancel write SetOnCancel;
     property OnPiece: TProc<IPeer, Integer, Integer, TUniString> read GetOnPiece write SetOnPiece;
+    property OnPort: TProc<IPeer, TIdPort> read GetOnPort write SetOnPort;
     property OnExtendedMessage: TProc<IPeer, IExtension> read GetOnExtendedMessage write SetOnExtendedMessage;
     property OnException: TProc<IPeer, Exception> read GetOnException write SetOnException;
     property OnUpdateCounter: TProc<IPeer, UInt64, UInt64> read GetOnUpdateCounter write SetOnUpdateCounter;
