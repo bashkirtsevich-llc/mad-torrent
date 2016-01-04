@@ -713,14 +713,13 @@ type
     procedure AddPeer(const AInfoHash: TUniString; const AHost: string;
       APort: TIdPort; AIPVer: TIdIPVersion = Id_IPv4);
 
-    {TODO -oMAD -cMajor : передавать параметром объект магнет-ссылки}
-    function AddMagnet(const AMagnetURL: string;
-      const ADownloadPath: string): ISeeding;
-    {TODO -oMAD -cMajor : передавать параметром объект метаданных}
-    function AddTorrent(const ATorrentData: TUniString;
+    function AddTorrent(AMagnetLink: IMagnetLink;
       const ADownloadPath: string): ISeeding; overload;
-    function AddTorrent(const ATorrentData, ABitField: TUniString;
-      const ADownloadPath: string; AStates: TSeedingStates): ISeeding; overload;
+    function AddTorrent(AMetaFile: IMetaFile;
+      const ADownloadPath: string): ISeeding; overload;
+    function AddTorrent(AMetaFile: IMetaFile;
+      const ADownloadPath: string; const ABitField: TUniString;
+      AStates: TSeedingStates): ISeeding; overload;
 
     function ContainsUnit(const AInfoHash: TUniString): Boolean;
 
@@ -783,12 +782,13 @@ type
 
     procedure RegisterSeeding(ASeeding: ISeeding);
 
-    function AddMagnet(const AMagnetURL: string;
-      const ADownloadPath: string): ISeeding; inline;
-    function AddTorrent(const ATorrentData: TUniString;
+    function AddTorrent(AMagnetLink: IMagnetLink;
       const ADownloadPath: string): ISeeding; overload; inline;
-    function AddTorrent(const ATorrentData, ABitField: TUniString;
-      const ADownloadPath: string; AStates: TSeedingStates): ISeeding; overload;
+    function AddTorrent(AMetaFile: IMetaFile;
+      const ADownloadPath: string): ISeeding; overload; inline;
+    function AddTorrent(AMetaFile: IMetaFile;
+      const ADownloadPath: string; const ABitField: TUniString;
+      AStates: TSeedingStates): ISeeding; overload; inline;
 
     function ContainsUnit(const AInfoHash: TUniString): Boolean; inline;
 
@@ -876,18 +876,15 @@ end;
 
 { TBittorrent }
 
-function TBittorrent.AddMagnet(const AMagnetURL, ADownloadPath: string): ISeeding;
-var
-  ml: IMagnetLink;
+function TBittorrent.AddTorrent(AMagnetLink: IMagnetLink;
+  const ADownloadPath: string): ISeeding;
 begin
   Lock;
   try
-    ml := TMagnetLink.Create(AMagnetURL);
-
-    if not FSeedings.TryGetValue(ml.InfoHash, Result) then
+    if not FSeedings.TryGetValue(AMagnetLink.InfoHash, Result) then
     begin
-      Result := TSeeding.Create(ADownloadPath, FThreads, FClientID, ml.InfoHash,
-        FListenPort);
+      Result := TSeeding.Create(ADownloadPath, FThreads, FClientID,
+        AMagnetLink.InfoHash, FListenPort);
 
       RegisterSeeding(Result);
     end;
@@ -932,24 +929,20 @@ begin
   end;
 end;
 
-function TBittorrent.AddTorrent(const ATorrentData: TUniString;
+function TBittorrent.AddTorrent(AMetaFile: IMetaFile;
   const ADownloadPath: string): ISeeding;
 begin
-  Result := AddTorrent(ATorrentData, '', ADownloadPath, [ssHaveMetadata, ssDownloading]);
+  Result := AddTorrent(AMetaFile, ADownloadPath, '', [ssHaveMetadata, ssDownloading]);
 end;
 
-function TBittorrent.AddTorrent(const ATorrentData, ABitField: TUniString;
-  const ADownloadPath: string; AStates: TSeedingStates): ISeeding;
-var
-  mf: IMetaFile;
+function TBittorrent.AddTorrent(AMetaFile: IMetaFile; const ADownloadPath: string;
+  const ABitField: TUniString; AStates: TSeedingStates): ISeeding;
 begin
   Lock;
   try
-    mf := TMetaFile.Create(ATorrentData);
-
-    if not FSeedings.TryGetValue(mf.InfoHash, Result) then
+    if not FSeedings.TryGetValue(AMetaFile.InfoHash, Result) then
     begin
-      Result := TSeeding.Create(ADownloadPath, FThreads, FClientID, mf,
+      Result := TSeeding.Create(ADownloadPath, FThreads, FClientID, AMetaFile,
         TBitField.FromUniString(ABitField), AStates, FListenPort);
 
       RegisterSeeding(Result);
