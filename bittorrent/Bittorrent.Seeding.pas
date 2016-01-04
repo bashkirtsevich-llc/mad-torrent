@@ -264,24 +264,20 @@ var
 begin
   Lock;
   try
-    // добавляем пиры только тогда, когда качаем
-    if (ssDownloading in FStates) and not (ssPaused in FStates) then
-    begin
-      TIdStack.IncUsage;
-      try
-        ip := GStack.ResolveHost(AHost);
-        h  := TPeer.CalcHashCode(ip, APort);
+    TIdStack.IncUsage;
+    try
+      ip := GStack.ResolveHost(AHost);
+      h  := TPeer.CalcHashCode(ip, APort);
 
-        for peer in FPeers do
-          if peer.HashCode = h then
-            Exit;
+      for peer in FPeers do
+        if peer.HashCode = h then
+          Exit;
 
-        FPeers.Add(ApplyPeerCallbacks(CreatePeer(ip, APort, AIPVer)));
+      FPeers.Add(ApplyPeerCallbacks(CreatePeer(ip, APort, AIPVer)));
 
-        Touch; { пинаем раздачу, пусть пробует качать }
-      finally
-        TIdStack.DecUsage;
-      end;
+      Touch; { пинаем раздачу, пусть пробует качать }
+    finally
+      TIdStack.DecUsage;
     end;
   finally
     Unlock;
