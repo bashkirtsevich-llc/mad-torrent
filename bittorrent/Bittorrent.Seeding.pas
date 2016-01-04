@@ -353,7 +353,8 @@ begin
   { init metadata }
   InitMetadata(AMetafile);
 
-  FStates := AStates + [ssHaveMetadata]; // переприсваиваем состояние раздачи
+  { объединяем множества }
+  FStates := FStates + AStates;
 
   { установка битфилдов и всего прочего }
   FBitField.CopyFrom(ABitField);
@@ -379,7 +380,7 @@ begin
   FInfoHash.Assign(AInfoHash);
   FDownloadPath   := ADownloadPath;
   FListenPort     := AListenPort;
-  FStates         := [ssDownloading];
+  FStates         := [ssDownloading, ssActive];
 
   FCounter        := TCounter.Create;
   FLock           := TObject.Create;
@@ -555,7 +556,7 @@ begin
     FDownloadQueue  := TDownloadPieceQueue.Create(AMetafile.PiecesCount,
       CancelReuests, CancelReuests);
 
-    FStates         := [ssHaveMetadata, ssActive, ssDownloading] - [ssCompleted]; { загружается }
+    FStates         := [ssHaveMetadata]; //- [ssCompleted]; { загружается }
 
     FLastRequest    := Now;
   finally
@@ -811,6 +812,8 @@ begin
                 { успешно загрузили метафайл }
                 mf := TMetaFile.Create(tmp);
                 InitMetadata(mf);
+
+                FStates := FStates + [ssActive, ssDownloading];
 
                 if Assigned(FOnMetadataLoaded) then
                   FOnMetadataLoaded(Self, mf);
