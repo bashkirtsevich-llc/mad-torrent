@@ -377,6 +377,7 @@ begin
   FDownloadPath   := ADownloadPath;
   FListenPort     := AListenPort;
   FStates         := [ssDownloading, ssActive];
+  FMetadataSize   := 0;
 
   FCounter        := TCounter.Create;
   FLock           := TObject.Create;
@@ -708,6 +709,12 @@ begin
   try
     Assert(Supports(APeer, IPeer));
 
+    { шлём extension-хендшейк }
+    APeer.SendExtensionMessage(TExtensionHandshake.Create('MAD-Torrent',
+      FListenPort, FMetadataSize));
+
+    APeer.SendPort(FListenPort);
+
     { сразу отправляем ему bitfield, если есть }
     if ssHaveMetadata in FStates then
       APeer.SendBitfield(FBitField);
@@ -748,9 +755,6 @@ begin
       { отсылаем ответный хендшейк }
       if Assigned(FMetafile)  then
         FMetadataSize := FMetafile.Metadata.Len;
-
-      APeer.SendExtensionMessage(TExtensionHandshake.Create('MAD-Torrent',
-        FListenPort, FMetadataSize));
 
       { пробуем запросить метаданные }
       if (hs.MetadataSize > 0) and not(ssHaveMetadata in FStates) and

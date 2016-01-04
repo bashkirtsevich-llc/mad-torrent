@@ -352,6 +352,7 @@ type
     procedure SendBitfield(const ABitfield: TBitField);
     procedure SendPiece(APieceIndex, AOffset: Integer; const ABlock: TUniString);
     procedure SendExtensionMessage(AExtension: IExtension);
+    procedure SendPort(APort: TIdPort);
 
     procedure Disconnect;
 

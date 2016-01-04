@@ -111,6 +111,7 @@ type
     procedure SendPiece(APieceIndex, AOffset: Integer;
       const ABlock: TUniString); inline;
     procedure SendExtensionMessage(AExtension: IExtension);
+    procedure SendPort(APort: TIdPort); inline;
 
     function GetHandshakeMessage: IMessage; inline;
 
@@ -530,6 +531,16 @@ begin
   Enter;
   try
     FSendQueue.Enqueue(TPieceMessage.Create(APieceIndex, AOffset, ABlock));
+  finally
+    Leave;
+  end;
+end;
+
+procedure TPeer.SendPort(APort: TIdPort);
+begin
+  Enter;
+  try
+    FSendQueue.Enqueue(TPortMessage.Create(APort));
   finally
     Leave;
   end;
