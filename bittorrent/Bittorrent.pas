@@ -713,8 +713,10 @@ type
     procedure AddPeer(const AInfoHash: TUniString; const AHost: string;
       APort: TIdPort; AIPVer: TIdIPVersion = Id_IPv4);
 
+    {TODO -oMAD -cMajor : передавать параметром объект магнет-ссылки}
     function AddMagnet(const AMagnetURL: string;
       const ADownloadPath: string): ISeeding;
+    {TODO -oMAD -cMajor : передавать параметром объект метаданных}
     function AddTorrent(const ATorrentData: TUniString;
       const ADownloadPath: string): ISeeding; overload;
     function AddTorrent(const ATorrentData, ABitField: TUniString;
@@ -933,7 +935,7 @@ end;
 function TBittorrent.AddTorrent(const ATorrentData: TUniString;
   const ADownloadPath: string): ISeeding;
 begin
-  Result := AddTorrent(ATorrentData, '', ADownloadPath, []);
+  Result := AddTorrent(ATorrentData, '', ADownloadPath, [ssHaveMetadata, ssDownloading]);
 end;
 
 function TBittorrent.AddTorrent(const ATorrentData, ABitField: TUniString;
@@ -1262,29 +1264,10 @@ begin
     for key in FSeedings.Keys do
     with FSeedings[key] do
     begin
-      {$IFDEF PUBL_UTIL}
-      if ssActive in State then
-      {$ENDIF}
       try
         Sync;
       except
-        {$IFDEF PUBL_UTIL}
-        on E: Exception do
-          DebugOutput('TShareman.SyncSeedings sync exception ' + E.ToString);
-        {$ENDIF}
-      end
-      {$IFDEF PUBL_UTIL}
-      else if MinutesBetween(t, LastRequest) >= DefaultSeedingIdleTime then
-      begin
-        DebugOutput('TShareman.SyncSeedings FSeedings.Remove(key)');
-        { если раздача неактивна более заданного времени -- убираем ее из списка.
-          повторный подгруз раздачи при подключении пира извне (раздача перейдет в активный режим). }
-
-        FSeedings.Remove(key);
-        DebugOutput('TShareman.SyncSeedings FSeedings.Remove(key) done');
-        Break;
       end;
-      {$ENDIF}
     end;
 
     { сброс счётчика, если нет активных раздач }
@@ -1295,10 +1278,6 @@ begin
     begin
       if FBlackListCounter = 0 then
       begin
-        {$IFDEF PUBL_UTIL}
-        DebugOutput('TShareman.SyncSeedings clear blacklist');
-        {$ENDIF}
-
         for h in FBlackList.Keys do
           if MinutesBetween(t, FBlackList[h]) >= FBlackListTime then
           begin
@@ -1311,10 +1290,6 @@ begin
         Dec(FBlackListCounter);
     end;
   except
-    {$IFDEF PUBL_UTIL}
-    on E: Exception do
-      DebugOutput('TShareman.SyncSeedings exception ' + E.ToString);
-    {$ENDIF}
   end;
 
   Unlock;
