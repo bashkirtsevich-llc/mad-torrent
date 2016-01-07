@@ -178,7 +178,9 @@ begin
               // самые долгоотложенные в начало
               Result := DateTimeToMilliseconds(ARight.ExecTime) - DateTimeToMilliseconds(ALeft.ExecTime);
             end
-          ) as IComparer<TConveyerElement>));
+          )
+        )
+      );
 
       KickStart(AConveyer);
     end;
