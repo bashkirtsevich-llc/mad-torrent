@@ -6,8 +6,9 @@ uses
   System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
   System.Classes, System.DateUtils, System.Math,
   Basic.UniString,
-  Common.BusyObj, Common.ThreadPool, Common.AccurateTimer,
+  Common.BusyObj, Common.ThreadPool, Common.AccurateTimer, Common.Prelude,
   Bittorrent.Bitfield,
+  DHT,
   IdIOHandler, IdSocketHandle, IdGlobal, IdContext, IdStack;
 
 const
@@ -754,6 +755,8 @@ type
     FLock: TObject;
     FListener: IServer;
     FListenPort: TIdPort;
+    FDHTEngine: IDHTEngine;
+    FDHTReady: Boolean;
     FBlackListTime: Integer;
     FBlackListCounter: Integer;
     FBlackList: TDictionary<string, TDateTime>;
@@ -768,6 +771,7 @@ type
     procedure SetOnActivateSeeding(const Value: TProc<IPeer, TUniString>); inline;
 
     procedure OnPeerConnect(AConnection: IConnection);
+    procedure OnDHTReady(AEngine: IDHTEngine);
     function Blacklisted(AHost: string): Boolean; inline;
     procedure AddToBlackList(AHost: string); inline;
     procedure OnSeedingUpdateCounter(ASeeding: ISeeding; ADown, AUpl: UInt64);
@@ -786,6 +790,8 @@ type
 
     procedure RegisterSeeding(ASeeding: ISeeding);
 
+    procedure BindSeedingDHT(ASeeding: ISeeding); inline;
+
     function AddTorrent(AMagnetLink: IMagnetLink;
       const ADownloadPath: string): ISeeding; overload; inline;
     function AddTorrent(AMetaFile: IMetaFile;
@@ -801,7 +807,7 @@ type
     function StopUnit(const AInfoHash: TUniString): Boolean;
     function DeleteUnit(const AInfoHash: TUniString; ADeleteFiles: Boolean = False): Boolean;
   public
-    constructor Create(const AClientID: TUniString; AListenPort: TIdPort);
+    constructor Create(const AClientID: TUniString; AListenPort, ADHTPort: TIdPort);
     destructor Destroy; override;
   end;
 
@@ -835,7 +841,9 @@ implementation
 
 uses
   Bittorrent.Server, Bittorrent.Seeding, Bittorrent.MetaFile, Bittorrent.Messages,
-  Bittorrent.Peer, Bittorrent.Connection, Bittorrent.Counter, Bittorrent.MagnetLink;
+  Bittorrent.Peer, Bittorrent.Connection, Bittorrent.Counter, Bittorrent.MagnetLink,
+  Bittorrent.Tracker.DHT,
+  DHT.Engine;
 
 { TMessageIDHelper }
 
@@ -917,10 +925,18 @@ end;
 
 procedure TBittorrent.RegisterSeeding(ASeeding: ISeeding);
 begin
-  ASeeding.OnUpdateCounter := OnSeedingUpdateCounter;
-  ASeeding.OnDelete := OnSeedingDelete;
+  Lock;
+  try
+    ASeeding.OnUpdateCounter := OnSeedingUpdateCounter;
+    ASeeding.OnDelete := OnSeedingDelete;
 
-  FSeedings.Add(ASeeding.InfoHash, ASeeding);
+    if FDHTReady then
+      BindSeedingDHT(ASeeding);
+
+    FSeedings.Add(ASeeding.InfoHash, ASeeding);
+  finally
+    Unlock;
+  end;
 end;
 
 procedure TBittorrent.AddToBlackList(AHost: string);
@@ -956,6 +972,14 @@ begin
   end;
 end;
 
+procedure TBittorrent.BindSeedingDHT(ASeeding: ISeeding);
+begin
+  ASeeding.AddTracker(TDHTTracker.Create(FThreads,
+    FDHTEngine.Announce(ASeeding.InfoHash, FListenPort),
+    FDHTEngine.GetPeers(ASeeding.InfoHash))
+  );
+end;
+
 function TBittorrent.Blacklisted(AHost: string): Boolean;
 begin
   Lock;
@@ -977,7 +1001,8 @@ begin
   end;
 end;
 
-constructor TBittorrent.Create(const AClientID: TUniString; AListenPort: TIdPort);
+constructor TBittorrent.Create(const AClientID: TUniString; AListenPort,
+  ADHTPort: TIdPort);
 begin
   Randomize;
 
@@ -1004,6 +1029,11 @@ begin
   FListener   := TServer.Create;
   FListener.ListenPort  := AListenPort;
   FListener.OnConnect   := OnPeerConnect;
+
+  FDHTEngine  := TDHTEngine.Create(AClientID, ADHTPort);
+  FDHTEngine.OnBootstrapComplete := OnDHTReady;
+
+  FDHTReady   := False;
 end;
 
 function TBittorrent.DeleteUnit(const AInfoHash: TUniString;
@@ -1058,6 +1088,23 @@ end;
 procedure TBittorrent.Lock;
 begin
   System.TMonitor.Enter(FLock);
+end;
+
+procedure TBittorrent.OnDHTReady(AEngine: IDHTEngine);
+begin
+  Lock;
+  try
+    TPrelude.Foreach<ISeeding>(FSeedings.Values.ToArray,
+      procedure (ASeeding: ISeeding)
+      begin
+        BindSeedingDHT(ASeeding);
+      end
+    );
+
+    FDHTReady := True;
+  finally
+    Unlock;
+  end;
 end;
 
 procedure TBittorrent.OnPeerConnect(AConnection: IConnection);
