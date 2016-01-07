@@ -752,11 +752,7 @@ begin
   try
     if Supports(AMessage, IExtensionHandshake, hs) then
     begin
-      { отсылаем ответный хендшейк }
-      if Assigned(FMetafile)  then
-        FMetadataSize := FMetafile.Metadata.Len;
-
-      { пробуем запросить метаданные }
+      { пробуем запросить метаданные, если у нас их нет }
       if (hs.MetadataSize > 0) and not(ssHaveMetadata in FStates) and
         hs.Supports.TryGetValue(TExtensionMetadata.GetClassSupportName, metadataID) then
       begin
