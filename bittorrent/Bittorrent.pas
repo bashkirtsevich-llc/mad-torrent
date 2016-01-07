@@ -781,6 +781,7 @@ type
     procedure Unlock; inline;
 
     function SyncSeedings: Boolean;
+    function SyncDHT: Boolean;
 
     procedure Start;
     procedure Stop; inline;
@@ -1260,6 +1261,7 @@ begin
   FTerminated := False;
 
   FThreads.Exec(Integer(TBittorrent), SyncSeedings);
+  FThreads.Exec(Integer(TDHTEngine), SyncDHT);
 end;
 
 function TBittorrent.StartUnit(const AInfoHash: TUniString): Boolean;
@@ -1292,6 +1294,20 @@ begin
   finally
     Unlock;
   end;
+end;
+
+function TBittorrent.SyncDHT: Boolean;
+begin
+  try
+    if not FDHTEngine.Busy then
+      FDHTEngine.Sync
+  except
+  end;
+
+  if not FTerminated then
+    FThreads.Schedule(Integer(TDHTEngine), 1, SyncDHT);
+
+  Result := False;
 end;
 
 function TBittorrent.SyncSeedings: Boolean;
