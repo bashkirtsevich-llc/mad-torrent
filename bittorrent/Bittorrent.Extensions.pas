@@ -32,7 +32,7 @@ type
   TExtensionHandshake = class(TExtension, IExtensionHandshake)
   private
     const
-      MaxRequests     = 250;
+      MaxRequests     = 255;
       MaxRequestKey   = 'reqq';
       PortKey         = 'p';
       SupportsKey     = 'm';
