@@ -1033,6 +1033,9 @@ begin
 
   FDHTEngine  := TDHTEngine.Create(AClientID, ADHTPort);
   FDHTEngine.OnBootstrapComplete := OnDHTReady;
+  {$IFDEF DEBUG}
+  FDHTEngine.AddBootstrapNode('router.bittorrent.com', 6881);
+  {$ENDIF}
 
   FDHTReady   := False;
 end;
@@ -1300,7 +1303,7 @@ function TBittorrent.SyncDHT: Boolean;
 begin
   try
     if not FDHTEngine.Busy then
-      FDHTEngine.Sync
+      FDHTEngine.Sync;
   except
   end;
 
