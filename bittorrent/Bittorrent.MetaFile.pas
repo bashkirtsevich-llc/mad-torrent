@@ -23,6 +23,7 @@ type
       PieceLengthKey  = 'piece length';
   private
     FInfoHash: TUniString;
+    FMetadata: TUniString;
     FFiles: TList<IFileItem>;
     FPieceHashes: TArray<TUniString>;
     FPieceLength: Integer;
@@ -107,6 +108,8 @@ begin
       begin
         Assert(Supports(infoDict[InfoKey], IBencodedDictionary));
         infoDict := infoDict[InfoKey] as IBencodedDictionary;
+
+        FMetadata.Assign(infoDict.Encode);
       end;
 
       with infoDict do
@@ -251,8 +254,7 @@ end;
 
 function TMetafile.GetMetadata: TUniString;
 begin
-//  Result := FMetadata;
-  // build metafile
+  Result := FMetadata;
 end;
 
 function TMetafile.GetPieceHash(APieceIndex: Integer): TUniString;
