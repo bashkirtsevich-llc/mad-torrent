@@ -315,7 +315,7 @@ begin
   with AIOHandler do
   begin
     WriteCardinal(MessageLen);
-    WriteByte(Byte(ClassMessageID));
+    WriteByte(ClassMessageID.AsByte);
   end;
 end;
 
@@ -681,7 +681,7 @@ end;
 
 function TExtensionMessage.MessageLen: Integer;
 begin
-  Result := (inherited MessageLen) + SizeOf(FMessageID) + GetExtension.Size;
+  Result := (inherited MessageLen) + SizeOf(FMessageID) + FMessageData.Len;
 end;
 
 procedure TExtensionMessage.ReadFromIOHandler(AIOHandler: TIdIOHandler;
