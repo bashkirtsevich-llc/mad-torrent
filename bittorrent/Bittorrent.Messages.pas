@@ -696,7 +696,7 @@ begin
   inherited WriteToIOHandler(AIOHandler);
 
   AIOHandler.WriteByte(FMessageID);
-  AIOHandler.WriteUniString(FExtendedMsg.Data);
+  AIOHandler.WriteUniString(FMessageData);
 end;
 
 { TKeepAliveMessage }
