@@ -6,6 +6,7 @@ uses
   System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
   System.Math, System.DateUtils, System.Hash,
   Basic.UniString,
+  Common.Prelude,
   Bittorrent, Bittorrent.Bitfield, Bittorrent.Counter,
   Common.BusyObj, Common.SortedList, Common.ThreadPool, Common.SHA1,
   IdGlobal, IdStack;
@@ -377,6 +378,14 @@ begin
   FDownloadPath   := ADownloadPath;
   FListenPort     := AListenPort;
   FStates         := [ssDownloading, ssActive];
+  FMetafileMap    := TSortedList<Integer, TUniString>.Create(
+    TDelegatedComparer<Integer>.Create(
+      function (const Left, Right: Integer): Integer
+      begin
+        Result := Left - Right;
+      end
+    )
+  );
   FMetadataSize   := 0;
 
   FCounter        := TCounter.Create;
@@ -794,15 +803,17 @@ begin
         mmtData:
           begin
             FMetafileMap.Add(md.Piece, md.Metadata);
-            { check infohash }
-            tmp.Len := 0;
 
-            {TODO -oMAD -cMinor : можно на fold заменить}
-            for i in FMetafileMap.Keys do
-              tmp := tmp + FMetafileMap[i].Value;
+            tmp := TPrelude.Fold<Integer, TUniString>(FMetafileMap.Keys.ToArray,
+              string.Empty, function (X: TUniString; Y: Integer): TUniString
+              begin
+                Result := X + FMetafileMap[Y].Value;
+              end
+            );
 
             if tmp.Len = FMetadataSize then
             begin
+              { check infohash }
               if SHA1(tmp) = FInfoHash then
               begin
                 { успешно загрузили метафайл }
