@@ -84,7 +84,7 @@ type
 
     //property Pool: TIdSchedulerOfThreadPool read FPool;
 
-    constructor Create(AMaxThreads: Integer = 0; APoolSize: Integer = 100);
+    constructor Create(AMaxThreads: Integer = 0; APoolSize: Integer = 10);
     destructor Destroy; override;
   end;
 
