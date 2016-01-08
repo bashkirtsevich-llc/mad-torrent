@@ -265,20 +265,23 @@ var
 begin
   Lock;
   try
-    TIdStack.IncUsage;
-    try
-      ip := GStack.ResolveHost(AHost);
-      h  := TPeer.CalcHashCode(ip, APort);
+    if (ssDownloading in FStates) or not (ssHaveMetadata in FStates) then
+    begin
+      TIdStack.IncUsage;
+      try
+        ip := GStack.ResolveHost(AHost);
+        h  := TPeer.CalcHashCode(ip, APort);
 
-      for peer in FPeers do
-        if peer.HashCode = h then
-          Exit;
+        for peer in FPeers do
+          if peer.HashCode = h then
+            Exit;
 
-      FPeers.Add(ApplyPeerCallbacks(CreatePeer(ip, APort, AIPVer)));
+        FPeers.Add(ApplyPeerCallbacks(CreatePeer(ip, APort, AIPVer)));
 
-      Touch; { пинаем раздачу, пусть пробует качать }
-    finally
-      TIdStack.DecUsage;
+        Touch; { пинаем раздачу, пусть пробует качать }
+      finally
+        TIdStack.DecUsage;
+      end;
     end;
   finally
     Unlock;
