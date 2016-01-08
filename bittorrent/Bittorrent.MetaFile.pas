@@ -108,13 +108,13 @@ begin
       begin
         Assert(Supports(infoDict[InfoKey], IBencodedDictionary));
         infoDict := infoDict[InfoKey] as IBencodedDictionary;
-
-        FMetadata.Assign(infoDict.Encode);
       end;
 
       with infoDict do
       begin
-        FInfoHash := SHA1(Encode);
+        FMetadata.Assign(Encode);
+
+        FInfoHash := SHA1(FMetadata);
 
         Assert(ContainsKey(PiecesKey));
         with Items[PiecesKey] as IBencodedString do
