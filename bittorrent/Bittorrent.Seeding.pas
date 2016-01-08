@@ -189,7 +189,7 @@ type
     procedure AddPeer(const AHost: string; APort: TIdPort;
       AIPVer: TIdIPVersion = Id_IPv4); overload;
     procedure AddPeer(APeer: IPeer); overload; inline;
-    procedure AddTracker(ATracker: ITracker); inline;
+    procedure AddTracker(ATracker: ITracker);
     procedure RemovePeer(APeer: IPeer); inline;
 
     procedure CancelReuests(APiece: Integer; APeer: IPeer);
@@ -301,8 +301,13 @@ procedure TSeeding.AddTracker(ATracker: ITracker);
 begin
   Lock;
   try
-    if not FTrackers.contains(ATracker) then
+    if not FTrackers.Contains(ATracker) then
       FTrackers.Add(ATracker);
+
+    ATracker.OnResponsePeerInfo := procedure (AHost: string; APort: TIdPort)
+    begin
+      AddPeer(AHost, APort);
+    end;
   finally
     Unlock;
   end;
@@ -752,7 +757,7 @@ procedure TSeeding.OnPeerExtendedMessage(APeer: IPeer; AMessage: IExtension);
 var
   hs: IExtensionHandshake;
   md: IExtensionMetadata;
-  i, j: Integer;
+  i: Integer;
   tmp: TUniString;
   mf: IMetaFile;
   metadataID: Byte;
@@ -768,15 +773,13 @@ begin
         FMetadataSize := hs.MetadataSize;
         { request all metadata pieces }
         i := 0;
-        j := 0;
 
-        while j < FMetadataSize do
+        while i * TExtensionMetadata.BlockSize < FMetadataSize do
         begin
           if not FMetafileMap.ContainsKey(i) then
             APeer.SendExtensionMessage(TExtensionMetadata.Create(mmtRequest, i));
 
           Inc(i);
-          Inc(j, TExtensionMetadata.BlockSize);
         end;
       end;
     end else
