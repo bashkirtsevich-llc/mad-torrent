@@ -6,7 +6,7 @@ uses
   System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
   System.DateUtils, System.Hash,
   Basic.UniString,
-  Common.BusyObj, Common.ThreadPool,
+  Common.BusyObj, Common.ThreadPool, Common.Prelude,
   Bittorrent, Bittorrent.Bitfield,
   IdGlobal, IdContext;
 
@@ -135,7 +135,7 @@ type
     procedure DoPiece(APieceIndex, AOffset: Integer; const ABlock: TUniString); inline;
     procedure DoCancel(APieceIndex, AOffset: Integer); inline;
     procedure DoPort(APort: TIdPort); inline;
-    procedure DoExtendedMessage(AExtension: IExtension); inline;
+    procedure DoExtendedMessage(AExtension: IExtension);
     procedure DoDisconnect;
   protected
     procedure DoSync; override; final;
@@ -695,7 +695,16 @@ begin
 end;
 
 procedure TPeer.DoExtendedMessage(AExtension: IExtension);
+var
+  hs: IExtensionHandshake;
 begin
+  if Supports(AExtension, IExtensionHandshake, hs) then
+    FExtensionSupports := TPrelude.Map<string, TExtensionItem>(
+      hs.Supports.Keys.ToArray, function (AName: string): TExtensionItem
+      begin
+        Result := TExtensionItem.Create(AName, hs.Supports[AName]);
+      end);
+
   if Assigned(FOnExtendedMessage) then
     FOnExtendedMessage(Self, AExtension);
 end;
