@@ -335,8 +335,13 @@ begin
 end;
 
 function TSortedList<TKey, TValue>.TKeyCollection.ToArray: TArray<TKey>;
+var
+  i: Integer;
 begin
+  SetLength(Result, GetCount);
 
+  for i := 0 to GetCount - 1 do
+    Result[i] := GetItem(i);
 end;
 
 end.
