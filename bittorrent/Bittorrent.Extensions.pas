@@ -52,6 +52,7 @@ type
     procedure Decode(const AData: TUniString); override;
     function GetData: TUniString; override;
   public
+    constructor Create(const AData: TUniString); reintroduce; overload;
     constructor Create(AClientVersion: string; APort: TIdPort; AMetadataSize: Integer); overload;
     destructor Destroy; override;
 
@@ -138,9 +139,7 @@ var
   i: Integer;
   supports: IBencodedDictionary;
 begin
-//  inherited Create;
-
-  FSupports := TDictionary<string, Byte>.Create;
+  Create(string.Empty);
 
   FMessageDict  := BencodedDictionary;
   supports      := BencodedDictionary;
@@ -238,6 +237,13 @@ begin
     end else
       Assert(False);
   end;
+end;
+
+constructor TExtensionHandshake.Create(const AData: TUniString);
+begin
+  FSupports := TDictionary<string, Byte>.Create;
+
+  inherited Create(AData);
 end;
 
 procedure TExtensionHandshake.Decode(const AData: TUniString);
