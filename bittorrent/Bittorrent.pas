@@ -639,6 +639,7 @@ type
     function GetTrackersCount: Integer;
     function GetInfoHash: TUniString;
     function GetBitfield: TBitField;
+    function GetWant: TBitField;
     function GetPeersHave: TBitSum;
     function GetItems: TEnumerable<ISeedingItem>;
     function GetItemsCount: Integer;
@@ -683,6 +684,7 @@ type
     property TrackersCount: Integer read GetTrackersCount;
     property InfoHash: TUniString read GetInfoHash;
     property Bitfield: TBitField read GetBitfield; // загружено
+    property Want: TBitField read GetWant; // необходимо
     property PeersHave: TBitSum read GetPeersHave; // всего доступно
     property Items: TEnumerable<ISeedingItem> read GetItems;
     property ItemsCount: Integer read GetItemsCount;

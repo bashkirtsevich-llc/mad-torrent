@@ -20,7 +20,7 @@ type
       MaxIdleTime          = 5*60*1000; { 5 минут }
       MaxPieceQueueSize    = 2048;{ максимальное кол-во запросов }
       { это значение необходимо рассчитывать, т.к. размер куска может быть разным (32 куска по 32 кб = 1 мегабайт) }
-      MaxPeerPiecesCount   = 8;   { максимальное кол-во кусков, запрашиваемых с одного пира за раз }
+      MaxPeerPiecesCount   = 1;   { максимальное кол-во кусков, запрашиваемых с одного пира за раз }
       MaxPieceQueueTimeout = 60;  { секунд (тоже зависит от скорости) }
       MaxPieceRequestCount = 8;   { на сколько запросов мы можем ответить за проход }
       CacheClearInterval   = 5;   { секунд }
@@ -156,6 +156,7 @@ type
     function GetTrackersCount: Integer; inline;
     function GetInfoHash: TUniString; inline;
     function GetBitfield: TBitField; inline;
+    function GetWant: TBitField; inline;
     function GetPeersHave: TBitSum; inline;
     function GetItems: TEnumerable<ISeedingItem>; inline;
     function GetItemsCount: Integer; inline;
@@ -205,6 +206,7 @@ type
     procedure MarkAsError; inline; // раздача с ошибкой
 
     function Require(AItem: ISeedingItem; AOffset, ALength: Int64): Boolean;
+    procedure FetchNext(APeer: IPeer);
 
     { обработчики событий пира }
     procedure OnPeerConnect(APeer: IPeer; AMessage: IMessage);
@@ -529,6 +531,17 @@ end;
 function TSeeding.GetTrackersCount: Integer;
 begin
   Result := FTrackers.Count;
+end;
+
+function TSeeding.GetWant: TBitField;
+begin
+  Lock;
+  try
+    Result := (not FBitField) and (not FDownloadQueue.AsBitfield);
+    Assert(Result.Len = FBitField.Len);
+  finally
+    Unlock;
+  end;
 end;
 
 procedure TSeeding.InitMetadata(AMetafile: IMetaFile);
@@ -952,7 +965,8 @@ begin
         for it in FPeers do
           if pfWeInterested in it.Flags then
             it.NotInterested;
-      end;
+      end else
+        FetchNext(APeer);
     finally
       Update;
     end else
@@ -1151,7 +1165,6 @@ var
   haveMD,
   weLoad,
   alive: Boolean;
-  pieceIdx: Integer;
   t: TTime;
 begin
   Lock;
@@ -1180,49 +1193,30 @@ begin
     alive   := False;
 
     if haveMD and weLoad then
-    begin
-      want := (not FBitField) and (not FDownloadQueue.AsBitfield);
-      Assert(want.Len = FBitField.Len);
-    end else
+      want := GetWant
+    else
     if not weLoad then
       (FCounter as IMutableCounter).ResetSpeed; { сброс показаний скорости }
+
+    FDownloadQueue.Timeout; { проверка таймаута }
 
     for peer in FPeers do
       if not peer.Busy then
       begin
         { соединение (хендшейк пройден) установлено успешно и у нас есть метаданные }
-        if peer.ConnectionEstablished and haveMD then
+        if peer.ConnectionEstablished and haveMD then { мы чето качаем }
         begin
-          { мы чето качаем }
-          if weLoad then
+          { оптимизация: если не выставлен ни один бит в want, значит мы не качаем }
+          if weLoad and not want.AllFalse and
+            (peer.Bitfield.Len > 0) and not TBitField(want and peer.Bitfield).AllFalse then
           begin
-            { оптимизация: если не выставлен ни один бит в want, значит мы не качаем }
             { он нам интересен, просим нас раздушить }
-            if (want.CheckedCount > 0) and
-               ([pfWeInterested] * peer.Flags = []) and
-               (peer.Bitfield.Len > 0) and
-               (TBitField(want and peer.Bitfield).CheckedCount > 0) then
-              peer.Interested;
-
-            FDownloadQueue.Timeout; { проверка таймаута }
-
-            { мы не зачоканы -- он готов нам отдавать }
-            if (want.CheckedCount > 0) and ([pfTheyChoke] * peer.Flags = []) and
-                FDownloadQueue.CanEnqueue(peer) then
-              for pieceIdx in FPiecePicker.Fetch(peer.Bitfield, FPeersHave, want) do
-              begin
-                {$IFDEF DEBUG}
-                DebugOutput('fetch ' + pieceIdx.ToString);
-                {$ENDIF}
-                FDownloadQueue.Enqueue(pieceIdx, peer);
-
-                TPiece.EnumBlocks(FMetafile.PieceLength[pieceIdx],
-                  procedure (AOffset, ALength: Integer)
-                  begin
-                    peer.Request(pieceIdx, AOffset, ALength);
-                  end);
-              end;
+            if [pfWeInterested] * peer.Flags = [] then
+              peer.Interested
+            else
+              FetchNext(peer); { пробуем что-нибудь с него скачать }
           end;
+
           { отвечаем на запросы }
           alive := FUploadQueue.Dequeue(peer,
             procedure (APeer: IPeer; APiece, AOffset, ASize: Integer)
@@ -1295,6 +1289,31 @@ begin
 
       FPeers.Clear;
     end;
+  finally
+    Unlock;
+  end;
+end;
+
+procedure TSeeding.FetchNext(APeer: IPeer);
+var
+  idx: Integer;
+begin
+  Lock;
+  try
+    if ([pfTheyChoke] * APeer.Flags = []) and FDownloadQueue.CanEnqueue(APeer) then
+      for idx in FPiecePicker.Fetch(APeer.Bitfield, FPeersHave, GetWant) do
+      begin
+        {$IFDEF DEBUG}
+        DebugOutput('fetch ' + idx.ToString);
+        {$ENDIF}
+        FDownloadQueue.Enqueue(idx, APeer);
+
+        TPiece.EnumBlocks(FMetafile.PieceLength[idx],
+          procedure (AOffset, ALength: Integer)
+          begin
+            APeer.Request(idx, AOffset, ALength);
+          end);
+      end;
   finally
     Unlock;
   end;
