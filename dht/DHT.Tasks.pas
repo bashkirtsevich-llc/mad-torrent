@@ -317,19 +317,24 @@ var
   n: INode;
   it: ITask;
 begin
-  for n in TNode.CloserNodes(GetInfoHash, FClosestNodes, GetClosestNodes(GetInfoHash),
-    TBucket.MaxCapacity) do
-    SendGetPeers(n);
+  Enter;
+  try
+    for n in TNode.CloserNodes(GetInfoHash, FClosestNodes, GetClosestNodes(GetInfoHash),
+      TBucket.MaxCapacity) do
+      SendGetPeers(n);
 
-  if FInitialized and (FSubtasks.Count = 0) then
-    RaiseComplete
-  else
-  for it in FSubtasks do
-    if not it.Busy then
-      it.Sync;
+    if FInitialized and (FSubtasks.Count = 0) then
+      RaiseComplete
+    else
+    for it in FSubtasks do
+      if not it.Busy then
+        it.Sync;
 
-  if not FInitialized then
-    FInitialized := True;
+    if not FInitialized then
+      FInitialized := True;
+  finally
+    Leave;
+  end;
 end;
 
 function TGetPeersTask.GetClosestNodes(ATarget: TNodeID): TArray<INode>;
@@ -427,19 +432,24 @@ procedure TInitialiseTask.DoSync;
 var
   it: ITask;
 begin
-  if not FInitialized then
-  begin
-    FInitialized := True;
+  Enter;
+  try
+    if not FInitialized then
+    begin
+      FInitialized := True;
 
-    SendFindNode(FInitialNodes);
-  end else
-  begin
-    for it in FSubtasks do
-      if not it.Busy then
-        it.Sync;
+      SendFindNode(FInitialNodes);
+    end else
+    begin
+      for it in FSubtasks do
+        if not it.Busy then
+          it.Sync;
 
-    if FSubtasks.Count = 0 then
-      RaiseComplete;
+      if FSubtasks.Count = 0 then
+        RaiseComplete;
+    end;
+  finally
+    Leave;
   end;
 end;
 
@@ -477,23 +487,28 @@ end;
 
 procedure TRefreshBucketTask.DoSync;
 begin
-  if not FInitialized then
-  begin
-    FInitialized := True;
-
-    if FBucket.NodesCount = 0 then
-      RaiseComplete
-    else
+  Enter;
+  try
+    if not FInitialized then
     begin
-      FBucket.SortBySeen;
-      FSubTask := QueryNode(FBucket.Nodes.ToArray[0]);
-    end;
-  end else
-  begin
-    Assert(Assigned(FSubTask));
+      FInitialized := True;
 
-    if not FSubTask.Busy then
-      FSubTask.Sync;
+      if FBucket.NodesCount = 0 then
+        RaiseComplete
+      else
+      begin
+        FBucket.SortBySeen;
+        FSubTask := QueryNode(FBucket.Nodes.ToArray[0]);
+      end;
+    end else
+    begin
+      Assert(Assigned(FSubTask));
+
+      if not FSubTask.Busy then
+        FSubTask.Sync;
+    end;
+  finally
+    Leave;
   end;
 end;
 
@@ -546,40 +561,45 @@ procedure TAnnounceTask.DoSync;
 var
   it: ITask;
 begin
-  if not FInitialized then
-  begin
-    FInitialized := True;
-
-    FSubtask := TGetPeersTask.Create(FLocalID, GetInfoHash, FOnSendMessage,
-      FOnGetClosest);
-    FSubtask.OnPeersFound := RaisePeersFound;
-    FSubtask.OnCompleted := procedure (t1: ITask; e1: ICompleteEventArgs)
-    var
-      n: INode;
+  Enter;
+  try
+    if not FInitialized then
     begin
-      for n in (t1 as IGetPeersTask).ClosestActiveNodes do
-        if not n.Token.Empty then
-          FSubtasks.Add(NewQueryTask(TAnnouncePeer.Create(FLocalId, GetInfoHash,
-            FPort, n.Token), n, procedure (t2: ITask; e2: ICompleteEventArgs)
-            begin
-              FSubtasks.Remove(t2);
-            end)
-          );
+      FInitialized := True;
 
-      FSubtask := nil;
+      FSubtask := TGetPeersTask.Create(FLocalID, GetInfoHash, FOnSendMessage,
+        FOnGetClosest);
+      FSubtask.OnPeersFound := RaisePeersFound;
+      FSubtask.OnCompleted := procedure (t1: ITask; e1: ICompleteEventArgs)
+      var
+        n: INode;
+      begin
+        for n in (t1 as IGetPeersTask).ClosestActiveNodes do
+          if not n.Token.Empty then
+            FSubtasks.Add(NewQueryTask(TAnnouncePeer.Create(FLocalId, GetInfoHash,
+              FPort, n.Token), n, procedure (t2: ITask; e2: ICompleteEventArgs)
+              begin
+                FSubtasks.Remove(t2);
+              end)
+            );
+
+        FSubtask := nil;
+      end;
+    end else
+    begin
+      if Assigned(FSubtask) and not FSubtask.Busy then
+        FSubtask.Sync;
+
+      for it in FSubtasks do
+        if not it.Busy then
+          it.Sync;
+
+      // если нода найдена и задачи анонсирования завешились
+      if not Assigned(FSubtask) and (FSubtasks.Count = 0) then
+        RaiseComplete;
     end;
-  end else
-  begin
-    if Assigned(FSubtask) and not FSubtask.Busy then
-      FSubtask.Sync;
-
-    for it in FSubtasks do
-      if not it.Busy then
-        it.Sync;
-
-    // если нода найдена и задачи анонсирования завешились
-    if not Assigned(FSubtask) and (FSubtasks.Count = 0) then
-      RaiseComplete;
+  finally
+    Leave;
   end;
 end;
 
