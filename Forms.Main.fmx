@@ -1,11 +1,30 @@
-object Form1: TForm1
+object frmMain: TfrmMain
   Left = 0
   Top = 0
   Caption = 'Form1'
-  ClientHeight = 480
-  ClientWidth = 640
+  ClientHeight = 177
+  ClientWidth = 667
   FormFactor.Width = 320
   FormFactor.Height = 480
   FormFactor.Devices = [Desktop]
+  OnCreate = FormCreate
   DesignerMasterStyle = 0
+  object btn1: TButton
+    Position.X = 8.000000000000000000
+    Position.Y = 32.000000000000000000
+    TabOrder = 0
+    Text = 'Download'
+    OnClick = btn1Click
+  end
+  object edtMagnet: TEdit
+    Touch.InteractiveGestures = [LongTap, DoubleTap]
+    Anchors = [akLeft, akTop, akRight]
+    TabOrder = 1
+    Text = 'magnet:?xt=urn:btih:afa82991982331cb7d0dd03b6994f7718dac696b'
+    Position.X = 8.000000000000000000
+    Position.Y = 8.000000000000000000
+    Size.Width = 651.000000000000000000
+    Size.Height = 22.000000000000000000
+    Size.PlatformDefault = False
+  end
 end
