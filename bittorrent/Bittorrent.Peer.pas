@@ -140,8 +140,6 @@ type
   protected
     procedure DoSync; override; final;
   public
-    class function CalcHashCode(const AHost: string; APort: TIdPort): Integer; static;
-  public
     constructor Create(AThreadPoolEx: TThreadPool; const AHost: string;
       APort: TIdPort; const AInfoHash, AClientID: TUniString;
       AIPVer: TIdIPVersion = Id_IPv4); overload;
@@ -232,7 +230,7 @@ begin
   FConnectionEstablished := False;
 
   FFlags            := [pfWeChoke, pfTheyChoke];
-  FHashCode         := CalcHashCode(AConnection.Host, AConnection.Port);
+  FHashCode         := THashBobJenkins.GetHashValue(AConnection.Host + ':' + AConnection.Port.ToString);
   FSendQueue        := TQueue<IMessage>.Create;
 end;
 
@@ -470,15 +468,6 @@ begin
   finally
     Leave;
   end;
-end;
-
-class function TPeer.CalcHashCode(const AHost: string; APort: TIdPort): Integer;
-var
-  tmp: TUniString;
-begin
-  tmp     := AHost;
-  tmp     := tmp + APort;
-  Result  := THashBobJenkins.GetHashValue(tmp.DataPtr[0]^, tmp.Len, 0);
 end;
 
 procedure TPeer.Cancel(AIndex, AOffset: Integer);
