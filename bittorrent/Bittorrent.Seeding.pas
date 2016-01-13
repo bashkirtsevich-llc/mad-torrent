@@ -121,6 +121,7 @@ type
   protected
     FLastRequest: TDateTime;
     FLastCacheClear: TDateTime;
+    FBlackList: TDictionary<string, TDateTime>;
     FLock: TObject;
     FMetafile: IMetaFile;
     FMetafileMap: TSortedList<Integer, TUniString>;
@@ -229,16 +230,13 @@ type
 
     procedure InitMetadata(AMetafile: IMetaFile);
 
+    procedure CheckBlackList;
+
     procedure DisconnectAllPeers;
     function ApplyPeerCallbacks(APeer: IPeer): IPeer;
     procedure RemovePeerCallbacks(APeer: IPeer); inline;
   protected
     procedure DoSync; override;
-
-    function CreatePeer(const AIP: string; APort: TIdPort;
-      AIPVer: TIdIPVersion): IPeer; virtual;
-    function CreateFileSystem(AMetaFile: IMetaFile;
-      const ADownloadFolder: string): IFileSystem; virtual;
   public
     constructor Create(const ADownloadPath: string; AThreadPoolEx: TThreadPool;
       const AClientID, AInfoHash: TUniString; AListenPort: TIdPort); reintroduce; overload;
@@ -262,28 +260,32 @@ uses
 procedure TSeeding.AddPeer(const AHost: string; APort: TIdPort; AIPVer: TIdIPVersion);
 var
   peer: IPeer;
-  h: Integer;
-  ip: string;
+  ip, addr: string;
 begin
   Lock;
   try
-    if (ssDownloading in FStates) or not (ssHaveMetadata in FStates) then
+    TIdStack.IncUsage;
+    try
+      ip := GStack.ResolveHost(AHost);
+    finally
+      TIdStack.DecUsage;
+    end;
+
+    CheckBlackList;
+
+    if (ssDownloading in FStates) or not (ssHaveMetadata in FStates) and
+      not FBlackList.ContainsKey(ip) then
     begin
-      TIdStack.IncUsage;
-      try
-        ip := GStack.ResolveHost(AHost);
-        h  := TPeer.CalcHashCode(ip, APort);
+      addr := Format('%s:%d', [ip, APort]);
 
-        for peer in FPeers do
-          if peer.HashCode = h then
-            Exit;
+      for peer in FPeers do
+        if peer.Host + ':' + peer.Port.ToString = addr then
+          Exit;
 
-        FPeers.Add(ApplyPeerCallbacks(CreatePeer(ip, APort, AIPVer)));
+      FPeers.Add(ApplyPeerCallbacks(TPeer.Create(FThreadPool, ip, APort,
+        FInfoHash, FClientID, AIPVer)));
 
-        Touch; { пинаем раздачу, пусть пробует качать }
-      finally
-        TIdStack.DecUsage;
-      end;
+      Touch; { пинаем раздачу, пусть пробует качать }
     end;
   finally
     Unlock;
@@ -398,6 +400,8 @@ begin
   );
   FMetadataSize   := 0;
 
+  FBlackList      := TDictionary<string, TDateTime>.Create;
+
   FCounter        := TCounter.Create;
   FLock           := TObject.Create;
   FPeers          := TList<IPeer>.Create;
@@ -410,18 +414,6 @@ begin
 
   FDownloadQueue  := TDownloadPieceQueue.Create(0, nil, nil);
   FUploadQueue    := TUploadPieceQueue.Create;
-end;
-
-function TSeeding.CreateFileSystem(AMetaFile: IMetaFile;
-  const ADownloadFolder: string): IFileSystem;
-begin
-  Result := TFileSystem.Create(AMetafile, ADownloadFolder);
-end;
-
-function TSeeding.CreatePeer(const AIP: string; APort: TIdPort;
-  AIPVer: TIdIPVersion): IPeer;
-begin
-  Result := TPeer.Create(FThreadPool, AIP, APort, FInfoHash, FClientID, AIPVer);
 end;
 
 procedure TSeeding.Delete(ADeleteFiles: Boolean = False);
@@ -452,6 +444,7 @@ begin
   FPiecesBuf.Free;
   FLock.Free;
   FMetafileMap.Free;
+  FBlackList.Free;
   inherited;
 end;
 
@@ -575,7 +568,7 @@ begin
       30
     );
 
-    FFileSystem     := CreateFileSystem(AMetafile, FDownloadPath);
+    FFileSystem     := TFileSystem.Create(AMetafile, FDownloadPath);
 
     FBitField       := TBitField.Create(AMetafile.PiecesCount);
     FPeersHave      := TBitSum.Create(FBitField.Len);
@@ -766,7 +759,14 @@ end;
 
 procedure TSeeding.OnPeerException(APeer: IPeer; AException: Exception);
 begin
-  RemovePeer(APeer);
+  Lock;
+  try
+    RemovePeer(APeer);
+
+    FBlackList.AddOrSetValue(APeer.Host, Now);
+  finally
+    Unlock;
+  end;
 end;
 
 procedure TSeeding.OnPeerExtendedMessage(APeer: IPeer; AMessage: IExtension);
@@ -1040,6 +1040,18 @@ begin
     begin
       APeer.Cancel(APiece, AOffset);
     end);
+end;
+
+procedure TSeeding.CheckBlackList;
+var
+  h: string;
+  t: TDateTime;
+begin
+  t := Now;
+
+  for h in FBlackList.Keys do
+    if MinutesBetween(t, FBlackList[h]) >= 10 then
+      FBlackList.Remove(h);
 end;
 
 procedure TSeeding.RemovePeer(APeer: IPeer);
