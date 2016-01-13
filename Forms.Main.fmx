@@ -20,11 +20,20 @@ object frmMain: TfrmMain
     Touch.InteractiveGestures = [LongTap, DoubleTap]
     Anchors = [akLeft, akTop, akRight]
     TabOrder = 1
-    Text = 'magnet:?xt=urn:btih:afa82991982331cb7d0dd03b6994f7718dac696b'
+    Text = 'magnet:?xt=urn:btih:3A30AE62DE60F6B22A8667D613B9754F26A305CD'
     Position.X = 8.000000000000000000
     Position.Y = 8.000000000000000000
     Size.Width = 651.000000000000000000
     Size.Height = 22.000000000000000000
+    Size.PlatformDefault = False
+  end
+  object pbComplete: TProgressBar
+    Anchors = [akLeft, akTop, akRight]
+    Orientation = Horizontal
+    Position.X = 96.000000000000000000
+    Position.Y = 32.000000000000000000
+    Size.Width = 563.000000000000000000
+    Size.Height = 20.000000000000000000
     Size.PlatformDefault = False
   end
 end

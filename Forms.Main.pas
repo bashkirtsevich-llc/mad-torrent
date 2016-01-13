@@ -15,6 +15,7 @@ type
   TfrmMain = class(TForm)
     btn1: TButton;
     edtMagnet: TEdit;
+    pbComplete: TProgressBar;
     procedure FormCreate(Sender: TObject);
     procedure btn1Click(Sender: TObject);
   private
@@ -36,8 +37,23 @@ begin
   //magnet:?xt=urn:btih:520A9A81C1F854271002CE80CF6A24D105FE5699
   //magnet:?xt=urn:btih:501ec472144d20a4461c08f3305d138db6f3a534
   //magnet:?xt=urn:btih:afa82991982331cb7d0dd03b6994f7718dac696b
-  bt.AddTorrent(TMagnetLink.Create(edtMagnet.Text), 'c:\downloads')
-    .OnMetadataLoaded := procedure (ASeeding: ISeeding; AMetaFile: IMetaFile)
+  //magnet:?xt=urn:btih:35b547155afd164679dededd08ff57f25e4f3092
+  //magnet:?xt=urn:btih:3A30AE62DE60F6B22A8667D613B9754F26A305CD
+  with bt.AddTorrent(TMagnetLink.Create(edtMagnet.Text), 'c:\downloads') do
+  begin
+    OnUpdate := procedure (ASeeding: ISeeding)
+    var
+      s: Single;
+    begin
+      s := ASeeding.PercentComplete;
+
+      TThread.Synchronize(nil, procedure
+      begin
+        pbComplete.Value := s;
+      end);
+    end;
+
+    OnMetadataLoaded := procedure (ASeeding: ISeeding; AMetaFile: IMetaFile)
     var
       fs: TFileStream;
       md: TUniString;
@@ -50,6 +66,7 @@ begin
         fs.Free;
       end;
     end;
+  end;
 end;
 
 procedure TfrmMain.FormCreate(Sender: TObject);
