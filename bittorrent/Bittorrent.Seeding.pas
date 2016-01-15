@@ -264,28 +264,36 @@ var
 begin
   Lock;
   try
-    TIdStack.IncUsage;
-    try
-      ip := GStack.ResolveHost(AHost);
-    finally
-      TIdStack.DecUsage;
-    end;
-
-    CheckBlackList;
-
-    if (ssDownloading in FStates) or not (ssHaveMetadata in FStates) and
-      not FBlackList.ContainsKey(ip) then
+    { не рекомендуется цепляться более чем к 50-и пирам }
+    if TPrelude.Fold<IPeer, Integer>(FPeers.ToArray, 0,
+      function (X: Integer; Y: IPeer): Integer
+      begin
+        Result := X + System.Math.IfThen(Y.ConnectionType = ctOutgoing, 1);
+      end) < 50 then
     begin
-      addr := Format('%s:%d', [ip, APort]);
+      TIdStack.IncUsage;
+      try
+        ip := GStack.ResolveHost(AHost);
+      finally
+        TIdStack.DecUsage;
+      end;
 
-      for peer in FPeers do
-        if peer.Host + ':' + peer.Port.ToString = addr then
-          Exit;
+      CheckBlackList;
 
-      FPeers.Add(ApplyPeerCallbacks(TPeer.Create(FThreadPool, ip, APort,
-        FInfoHash, FClientID, AIPVer)));
+      if (ssDownloading in FStates) or not (ssHaveMetadata in FStates) and
+        not FBlackList.ContainsKey(ip) then
+      begin
+        addr := Format('%s:%d', [ip, APort]);
 
-      Touch; { пинаем раздачу, пусть пробует качать }
+        for peer in FPeers do
+          if peer.Host + ':' + peer.Port.ToString = addr then
+            Exit;
+
+        FPeers.Add(ApplyPeerCallbacks(TPeer.Create(FThreadPool, ip, APort,
+          FInfoHash, FClientID, AIPVer)));
+
+        Touch; { пинаем раздачу, пусть пробует качать }
+      end;
     end;
   finally
     Unlock;
