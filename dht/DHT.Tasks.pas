@@ -12,15 +12,23 @@ uses
 type
   TTask = class abstract(TBusy, ITask)
   strict private
-    FOnCompleted: TProc<ITask, ICompleteEventArgs>;
+    FLock: TObject;
     FCompleted: Boolean;
+    FOnCompleted: TProc<ITask, ICompleteEventArgs>;
     function GetCompleted: Boolean; inline;
     function GetOnCompleted: TProc<ITask, ICompleteEventArgs>; inline;
     procedure SetOnCompleted(const Value: TProc<ITask, ICompleteEventArgs>); inline;
   strict protected
+    procedure Lock; inline;
+    procedure Unlock; inline;
+
     procedure Reset; virtual;
+
     procedure RaiseComplete(AEventArgs: ICompleteEventArgs = nil); inline;
+
     constructor Create; reintroduce;
+  public
+    destructor Destroy; override;
   end;
 
   TNetworkTask = class abstract(TTask)
@@ -151,7 +159,15 @@ constructor TTask.Create;
 begin
   inherited Create;
 
+  FLock := TObject.Create;
   FCompleted := False;
+end;
+
+destructor TTask.Destroy;
+begin
+  FLock.Free;
+
+  inherited;
 end;
 
 function TTask.GetCompleted: Boolean;
@@ -162,6 +178,11 @@ end;
 function TTask.GetOnCompleted: TProc<ITask, ICompleteEventArgs>;
 begin
   Result := FOnCompleted;
+end;
+
+procedure TTask.Lock;
+begin
+  TMonitor.Enter(FLock);
 end;
 
 procedure TTask.RaiseComplete(AEventArgs: ICompleteEventArgs);
@@ -180,6 +201,11 @@ end;
 procedure TTask.SetOnCompleted(const Value: TProc<ITask, ICompleteEventArgs>);
 begin
   FOnCompleted := Value;
+end;
+
+procedure TTask.Unlock;
+begin
+  TMonitor.Exit(FLock);
 end;
 
 { TNetworkTask }
@@ -317,7 +343,7 @@ var
   n: INode;
   it: ITask;
 begin
-  Enter;
+  Lock;
   try
     for n in TNode.CloserNodes(GetInfoHash, FClosestNodes, GetClosestNodes(GetInfoHash),
       TBucket.MaxCapacity) do
@@ -333,7 +359,7 @@ begin
     if not FInitialized then
       FInitialized := True;
   finally
-    Leave;
+    Unlock;
   end;
 end;
 
@@ -365,48 +391,58 @@ procedure TGetPeersTask.SendGetPeers(ANode: INode);
 var
   distance: TNodeID;
 begin
-  distance := ANode.ID xor GetInfoHash;
-  FQueriedNodes.Add(distance, ANode);
+  Lock;
+  try
+    distance := ANode.ID xor GetInfoHash;
+    FQueriedNodes.Add(distance, ANode);
 
-  FSubtasks.Add(NewQueryTask(TGetPeers.Create(FLocalId, GetInfoHash), ANode,
-    procedure (t: ITask; e: ICompleteEventArgs)
-    var
-      args: ISendQueryEventArgs;
-      target: INode;
-      index: Integer;
-      response: IGetPeersResponse;
-      n: INode;
-    begin
-      FSubtasks.Remove(t);
-
-      // We want to keep a list of the top (K) closest nodes which have responded
-      target := (t as ISendQueryTask).Target;
-      index := FQueriedNodes.Values.IndexOf(target);
-      args := e as ISendQueryEventArgs;
-      if (index >= TBucket.MaxCapacity) or args.TimedOut then
-        FQueriedNodes.Delete(index);
-
-      if not args.TimedOut then
+    FSubtasks.Add(NewQueryTask(TGetPeers.Create(FLocalId, GetInfoHash), ANode,
+      procedure (t: ITask; e: ICompleteEventArgs)
+      var
+        args: ISendQueryEventArgs;
+        target: INode;
+        index: Integer;
+        response: IGetPeersResponse;
+        n: INode;
       begin
-        response := args.Response as IGetPeersResponse;
-
-        // Ensure that the local Node object has the token. There may/may not be
-        // an additional copy in the routing table depending on whether or not
-        // it was able to fit into the table.
-        target.Token := response.Token;
-        if Assigned(response.Values) then
-          RaisePeersFound(TPeer.Decode(response.Values)); // We have actual peers!
-
-        if response.Nodes.Len > 0 then
-        begin
-          // We got a list of nodes which are closer
-          for n in TNode.CloserNodes(GetInfoHash, FClosestNodes,
-            TNode.FromCompactNode(response.Nodes), TBucket.MaxCapacity) do
-            SendGetPeers(n);
+        Lock;
+        try
+          FSubtasks.Remove(t);
+        finally
+          Unlock;
         end;
-      end;
-    end)
-  );
+
+        // We want to keep a list of the top (K) closest nodes which have responded
+        target := (t as ISendQueryTask).Target;
+        index := FQueriedNodes.Values.IndexOf(target);
+        args := e as ISendQueryEventArgs;
+        if (index >= TBucket.MaxCapacity) or args.TimedOut then
+          FQueriedNodes.Delete(index);
+
+        if not args.TimedOut then
+        begin
+          response := args.Response as IGetPeersResponse;
+
+          // Ensure that the local Node object has the token. There may/may not be
+          // an additional copy in the routing table depending on whether or not
+          // it was able to fit into the table.
+          target.Token := response.Token;
+          if Assigned(response.Values) then
+            RaisePeersFound(TPeer.Decode(response.Values)); // We have actual peers!
+
+          if response.Nodes.Len > 0 then
+          begin
+            // We got a list of nodes which are closer
+            for n in TNode.CloserNodes(GetInfoHash, FClosestNodes,
+              TNode.FromCompactNode(response.Nodes), TBucket.MaxCapacity) do
+              SendGetPeers(n);
+          end;
+        end;
+      end)
+    );
+  finally
+    Unlock;
+  end;
 end;
 
 { TInitialiseTask }
@@ -432,7 +468,7 @@ procedure TInitialiseTask.DoSync;
 var
   it: ITask;
 begin
-  Enter;
+  Lock;
   try
     if not FInitialized then
     begin
@@ -449,7 +485,7 @@ begin
         RaiseComplete;
     end;
   finally
-    Leave;
+    Unlock;
   end;
 end;
 
@@ -457,21 +493,31 @@ procedure TInitialiseTask.SendFindNode(ANewNodes: TArray<INode>);
 var
   n: INode;
 begin
-  for n in TNode.CloserNodes(FLocalId, FNodes, ANewNodes, TBucket.MaxCapacity) do
-  begin
-    FSubtasks.Add(NewQueryTask(TFindNode.Create(FLocalId, FLocalId), n,
-      procedure (t: ITask; e: ICompleteEventArgs)
-      var
-        args: ISendQueryEventArgs;
-        response: IFindNodeResponse;
-      begin
-        FSubtasks.Remove(t);
+  Lock;
+  try
+    for n in TNode.CloserNodes(FLocalId, FNodes, ANewNodes, TBucket.MaxCapacity) do
+    begin
+      FSubtasks.Add(NewQueryTask(TFindNode.Create(FLocalId, FLocalId), n,
+        procedure (t: ITask; e: ICompleteEventArgs)
+        var
+          args: ISendQueryEventArgs;
+          response: IFindNodeResponse;
+        begin
+          Lock;
+          try
+            FSubtasks.Remove(t);
+          finally
+            Unlock;
+          end;
 
-        if Supports(e, ISendQueryEventArgs, args) and not args.TimedOut and
-           Supports(args.Response, IFindNodeResponse, response) then
-          SendFindNode(TNode.FromCompactNode(response.Nodes));
-      end)
-    );
+          if Supports(e, ISendQueryEventArgs, args) and not args.TimedOut and
+             Supports(args.Response, IFindNodeResponse, response) then
+            SendFindNode(TNode.FromCompactNode(response.Nodes));
+        end)
+      );
+    end;
+  finally
+    Unlock;
   end;
 end;
 
@@ -487,7 +533,7 @@ end;
 
 procedure TRefreshBucketTask.DoSync;
 begin
-  Enter;
+  Lock;
   try
     if not FInitialized then
     begin
@@ -508,7 +554,7 @@ begin
         FSubTask.Sync;
     end;
   finally
-    Leave;
+    Unlock;
   end;
 end;
 
@@ -561,7 +607,7 @@ procedure TAnnounceTask.DoSync;
 var
   it: ITask;
 begin
-  Enter;
+  Lock;
   try
     if not FInitialized then
     begin
@@ -574,16 +620,21 @@ begin
       var
         n: INode;
       begin
-        for n in (t1 as IGetPeersTask).ClosestActiveNodes do
-          if not n.Token.Empty then
-            FSubtasks.Add(NewQueryTask(TAnnouncePeer.Create(FLocalId, GetInfoHash,
-              FPort, n.Token), n, procedure (t2: ITask; e2: ICompleteEventArgs)
-              begin
-                FSubtasks.Remove(t2);
-              end)
-            );
+        Lock;
+        try
+          for n in (t1 as IGetPeersTask).ClosestActiveNodes do
+            if not n.Token.Empty then
+              FSubtasks.Add(NewQueryTask(TAnnouncePeer.Create(FLocalId, GetInfoHash,
+                FPort, n.Token), n, procedure (t2: ITask; e2: ICompleteEventArgs)
+                begin
+                  FSubtasks.Remove(t2);
+                end)
+              );
 
-        FSubtask := nil;
+          FSubtask := nil;
+        finally
+          Unlock;
+        end;
       end;
     end else
     begin
@@ -599,7 +650,7 @@ begin
         RaiseComplete;
     end;
   finally
-    Leave;
+    Unlock;
   end;
 end;
 
