@@ -82,8 +82,8 @@ type
     function ContainsKey(const Key: TKey): Boolean;
     function ContainsValue(const Value: TValue): Boolean;
 
-    property Keys: TKeyCollection read GetKeys;
-    property Values: TValueCollection read GetValues;
+    property Keys: TKeyCollection read GetKeys; {$MESSAGE WARN 'Not safe method'}
+    property Values: TValueCollection read GetValues; {$MESSAGE WARN 'Not safe method'}
 
     constructor Create(AComparer: IComparer<TKey>); reintroduce;
     destructor Destroy; override;
