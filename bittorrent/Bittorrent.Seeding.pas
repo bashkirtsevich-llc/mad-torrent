@@ -8,7 +8,7 @@ uses
   Basic.UniString,
   Common.Prelude,
   Bittorrent, Bittorrent.Bitfield, Bittorrent.Counter,
-  Common.BusyObj, Common.SortedList, Common.ThreadPool, Common.SHA1,
+  Common.BusyObj, Common.ThreadPool, Common.SHA1,
   IdGlobal, IdStack;
 
 type
@@ -124,7 +124,7 @@ type
     FBlackList: TDictionary<string, TDateTime>;
     FLock: TObject;
     FMetafile: IMetaFile;
-    FMetafileMap: TSortedList<Integer, TUniString>;
+    FMetafileMap: TDictionary<Integer, TUniString>;
     FMetadataSize: Integer;
     FInfoHash: TUniString;
     FClientID: TUniString;
@@ -398,14 +398,7 @@ begin
   FDownloadPath   := ADownloadPath;
   FListenPort     := AListenPort;
   FStates         := [ssDownloading, ssActive];
-  FMetafileMap    := TSortedList<Integer, TUniString>.Create(
-    TDelegatedComparer<Integer>.Create(
-      function (const Left, Right: Integer): Integer
-      begin
-        Result := Left - Right;
-      end
-    )
-  );
+  FMetafileMap    := TDictionary<Integer, TUniString>.Create;
   FMetadataSize   := 0;
 
   FBlackList      := TDictionary<string, TDateTime>.Create;
@@ -831,10 +824,18 @@ begin
           begin
             FMetafileMap.Add(md.Piece, md.Metadata);
 
-            tmp := TPrelude.Fold<Integer, TUniString>(FMetafileMap.Keys.ToArray,
-              string.Empty, function (X: TUniString; Y: Integer): TUniString
+            tmp := TPrelude.Fold<Integer, TUniString>(
+              TPrelude.Sort<Integer>(FMetafileMap.Keys.ToArray,
+                TDelegatedComparer<Integer>.Create(
+                  function (const Left, Right: Integer): Integer
+                  begin
+                    Result := Left - Right;
+                  end
+                )
+              ), string.Empty,
+              function (X: TUniString; Y: Integer): TUniString
               begin
-                Result := X + FMetafileMap[Y].Value;
+                Result := X + FMetafileMap[Y];
               end
             );
 
