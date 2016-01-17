@@ -172,7 +172,7 @@ begin
         distance := n.ID xor ATarget;
         if sortedNodes.Count = TBucket.MaxCapacity then
         begin
-          if distance > sortedNodes.Keys[sortedNodes.Count - 1] then
+          if distance > sortedNodes[sortedNodes.Count - 1].Key then
             Continue;
 
           sortedNodes.Delete(sortedNodes.Count - 1);
