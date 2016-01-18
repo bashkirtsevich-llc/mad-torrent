@@ -40,7 +40,7 @@ type
 
       TValueCollection = class(TEnumerable<TValue>)
       private
-        FSortedList: TSortedList<TKey, TValue>;
+        [Weak] FSortedList: TSortedList<TKey, TValue>;
         function GetCount: Integer;
         function GetItem(AIndex: Integer): TValue;
       protected
@@ -56,7 +56,7 @@ type
 
       TKeyCollection = class(TEnumerable<TKey>)
       private
-        FSortedList: TSortedList<TKey, TValue>;
+        [Weak] FSortedList: TSortedList<TKey, TValue>;
         function GetCount: Integer;
         function GetItem(AIndex: Integer): TKey;
       protected
@@ -82,8 +82,8 @@ type
     function ContainsKey(const Key: TKey): Boolean;
     function ContainsValue(const Value: TValue): Boolean;
 
-    property Keys: TKeyCollection read GetKeys; {$MESSAGE WARN 'Not safe method'}
-    property Values: TValueCollection read GetValues; {$MESSAGE WARN 'Not safe method'}
+    property Keys: TKeyCollection read GetKeys;
+    property Values: TValueCollection read GetValues;
 
     constructor Create(AComparer: IComparer<TKey>); reintroduce;
     destructor Destroy; override;
