@@ -182,6 +182,7 @@ end;
 
 procedure TTask.Lock;
 begin
+  _AddRef;
   TMonitor.Enter(FLock);
 end;
 
@@ -206,6 +207,7 @@ end;
 procedure TTask.Unlock;
 begin
   TMonitor.Exit(FLock);
+  _Release;
 end;
 
 { TNetworkTask }
