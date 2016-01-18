@@ -75,7 +75,7 @@ type
           end;
       private
         FBitField: TBitField;
-        FList: TList<TDownloadPieceQueueItem>;
+        FList: TList<TDownloadPieceQueueItem>; // надо заменить на словарь, он быстрее работает
         FOnTimeout: TProc<Integer, IPeer>;
         FOnCancel: TProc<Integer, IPeer>;
 
@@ -454,19 +454,24 @@ var
   i: Integer;
   it: IPeer;
 begin
-  for i := FPeers.Count - 1 downto 0 do
-  begin
-    it := FPeers[i];
-
-    if it.ConnectionConnected then
-      it.Disconnect
-    else
+  Lock;
+  try
+    for i := FPeers.Count - 1 downto 0 do
     begin
-      FDownloadQueue.CancelRequests(it);
-      FUploadQueue.CancelRequests(it);
-    end;
+      it := FPeers[i];
 
-    RemovePeerCallbacks(it);
+      if it.ConnectionConnected then
+        it.Disconnect
+      else
+      begin
+        FDownloadQueue.CancelRequests(it);
+        FUploadQueue.CancelRequests(it);
+      end;
+
+      RemovePeerCallbacks(it);
+    end;
+  finally
+    Unlock;
   end;
 end;
 
@@ -822,7 +827,7 @@ begin
 
         mmtData:
           begin
-            FMetafileMap.Add(md.Piece, md.Metadata);
+            FMetafileMap.Add(md.Piece, md.Metadata); // проверять дубликаты
 
             tmp := TPrelude.Fold<Integer, TUniString>(
               TPrelude.Sort<Integer>(FMetafileMap.Keys.ToArray,
@@ -1464,6 +1469,8 @@ begin
   for it in FList do
     if SecondsBetween(t, it.TimeStamp) > MaxPieceQueueTimeout then
     begin
+      Assert(Assigned(it.Peer)); // почему срабатывает?
+
       FList.Remove(it);
       FBitField[it.Piece] := False;
 
@@ -1476,16 +1483,13 @@ end;
 
 procedure TSeeding.TDownloadPieceQueue.Touch(APiece: Integer);
 var
-  it, it2: TDownloadPieceQueueItem;
+  i: Integer;
 begin
-  for it in FList do
-    if it.Piece = APiece then
+  for i := 0 to FList.Count - 1 do
+    if FList[i].Piece = APiece then
     begin
-      it2 := it;
-      it2.TimeStamp := Now;
-
-      FList.Remove(it);
-      FList.Add(it2);
+      with FList[i] do
+        FList[i] := TDownloadPieceQueueItem.Create(Peer, Piece);
 
       Break;
     end;
