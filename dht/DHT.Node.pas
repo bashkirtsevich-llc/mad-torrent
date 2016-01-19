@@ -72,7 +72,7 @@ begin
       if ACurrentNodes.Count < AMaxNodes then
         ACurrentNodes.Add(distance, node.ID)
       else
-      if distance < ACurrentNodes[ACurrentNodes.Count - 1].Key then
+      if (ACurrentNodes.Count > 0) and (distance < ACurrentNodes.Last.Key) then
       begin
         { вымещаем дальний }
         ACurrentNodes.Delete(ACurrentNodes.Count - 1);
