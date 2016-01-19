@@ -69,10 +69,12 @@ begin
   end;
 
   while b do
+  begin
     if not ATask.Busy then
-      ATask.Sync
-    else
-      Sleep(1);
+      ATask.Sync;
+
+    Sleep(1); // дабы не создавать излишнюю нагрузку на проц
+  end;
 end;
 
 procedure TDHTTracker.OnPeersFound(APeers: TArray<DHT.IPeer>);
