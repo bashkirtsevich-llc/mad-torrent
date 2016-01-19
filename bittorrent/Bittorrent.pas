@@ -358,6 +358,7 @@ type
     procedure SendPort(APort: TIdPort);
 
     procedure Disconnect;
+    procedure Shutdown;
 
     property InfoHash: TUniString read GetInfoHash;
     property ClientID: TUniString read GetClientID;

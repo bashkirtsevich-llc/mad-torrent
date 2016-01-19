@@ -19,6 +19,8 @@ type
       KeepAliveInterval = 5;
       ConnectionTimeout = 60;
   protected
+    FLock: TObject;
+    FShutdown: Boolean;
     FInfoHash: TUniString;
     FOurClientID: TUniString;
     FClientID: TUniString;
@@ -101,6 +103,9 @@ type
 
     procedure UpdateCounter; inline;
 
+    procedure Lock; inline;
+    procedure Unlock; inline;
+
     // messages
     procedure KeepAlive; inline;
     procedure Interested; inline;
@@ -119,6 +124,7 @@ type
     function GetHandshakeMessage: IMessage; inline;
 
     procedure Disconnect; inline;
+    procedure Shutdown; inline;
 
     procedure ConnectOutgoing; { отправка и прием хендшейка наружу }
     procedure ConnectIncoming; { прием и отправка хендшейка извне }
@@ -218,6 +224,9 @@ constructor TPeer.Create(AThreadPoolEx: TThreadPool; AConnection: IConnection;
 begin
   inherited Create;
 
+  FLock             := TObject.Create;
+  FShutdown         := False;
+
   FLastRecvSize     := 0;
   FLastSentSize     := 0;
 
@@ -249,6 +258,7 @@ begin
     FConnection.Disconnect;
 
   FSendQueue.Free;
+  FLock.Free;
   inherited;
 end;
 
@@ -513,6 +523,12 @@ begin
   end;
 end;
 
+procedure TPeer.Lock;
+begin
+  _AddRef;
+  TMonitor.Enter(FLock);
+end;
+
 procedure TPeer.NotInterested;
 begin
   Enter;
@@ -564,6 +580,12 @@ begin
   finally
     Leave;
   end;
+end;
+
+procedure TPeer.Unlock;
+begin
+  TMonitor.Exit(FLock);
+  _Release;
 end;
 
 procedure TPeer.UpdateCounter;
@@ -653,6 +675,17 @@ end;
 procedure TPeer.SetOnUpdateCounter(Value: TProc<IPeer, UInt64, UInt64>);
 begin
   FOnUpdateCounter := Value;
+end;
+
+procedure TPeer.Shutdown;
+begin
+  Lock;
+  try
+    Disconnect;
+    FShutdown := True;
+  finally
+    Unlock;
+  end;
 end;
 
 procedure TPeer.DoStart(const ABitField: TBitField);
@@ -799,65 +832,71 @@ begin
     i: Integer;
     t: TDateTime;
   begin
+    Lock;
     try
-      if GetConnectionConnected and GetConnectionEstablished then
-      begin
-        t := Now;
-        if SecondsBetween(t, FLastKeepAlive) >= KeepAliveInterval then
+      try
+        if GetConnectionConnected and GetConnectionEstablished then
         begin
-          KeepAlive;
-          FLastKeepAlive := t;
-        end;
+          t := Now;
+          if SecondsBetween(t, FLastKeepAlive) >= KeepAliveInterval then
+          begin
+            KeepAlive;
+            FLastKeepAlive := t;
+          end;
 
-        { долго молчит -- отпинываем }
-        if SecondsBetween(t, FLastResponse) >= ConnectionTimeout then
+          { долго молчит -- отпинываем }
+          if SecondsBetween(t, FLastResponse) >= ConnectionTimeout then
+          begin
+            FConnection.Disconnect;
+            raise EPeerConnectionTimeout.Create('Connection timeout');
+          end;
+
+          { выплёвываем очередь сообщений в сеть (не даем отправить более MaxSendQueueSize сообщений) }
+          i := 0;
+          while (FSendQueue.Count > 0) and (i < MaxSendQueueSize) and GetConnectionConnected do
+          begin
+            FConnection.SendMessage(FSendQueue.Dequeue);
+            Inc(i);
+          end;
+
+          { пытаемся принять MaxRecvQueueSize сообщений }
+          i := 0;
+          while (i < MaxRecvQueueSize) and GetConnectionConnected do
+          begin
+            msg := FConnection.ReceiveMessage;
+            if Assigned(msg) then
+              DoHandleMessage(msg)
+            else
+              Break;
+
+            Inc(i);
+          end;
+
+          { обновить время последнего ответа }
+          if i > 0 then // small optimization against frequent call's of UtcNow
+            FLastResponse := t;
+
+          UpdateCounter; // обновляем счетчик трафика
+        end else
+        if not FShutdown then
+        case FConnection.ConnectionType of { контолируем соединение }
+          ctIncoming:
+            if GetConnectionConnected and not GetConnectionEstablished then
+              ConnectIncoming; // к нам подключились -- начинаем диалог
+
+          ctOutgoing:
+            if not GetConnectionConnected or not GetConnectionEstablished then
+              ConnectOutgoing; // мы цепляемся
+        end;
+      except
+        on E: Exception do
         begin
-          FConnection.Disconnect;
-          raise EPeerConnectionTimeout.Create('Connection timeout');
+          if Assigned(FOnException) then
+            FOnException(Self, E);
         end;
-
-        { выплёвываем очередь сообщений в сеть (не даем отправить более MaxSendQueueSize сообщений) }
-        i := 0;
-        while (FSendQueue.Count > 0) and (i < MaxSendQueueSize) and GetConnectionConnected do
-        begin
-          FConnection.SendMessage(FSendQueue.Dequeue);
-          Inc(i);
-        end;
-
-        { пытаемся принять MaxRecvQueueSize сообщений }
-        i := 0;
-        while (i < MaxRecvQueueSize) and GetConnectionConnected do
-        begin
-          msg := FConnection.ReceiveMessage;
-          if Assigned(msg) then
-            DoHandleMessage(msg)
-          else
-            Break;
-
-          Inc(i);
-        end;
-
-        { обновить время последнего ответа }
-        if i > 0 then // small optimization against frequent call's of UtcNow
-          FLastResponse := t;
-
-        UpdateCounter; // обновляем счетчик трафика
-      end else
-      case FConnection.ConnectionType of { контолируем соединение }
-        ctIncoming:
-          if GetConnectionConnected and not GetConnectionEstablished then
-            ConnectIncoming; // к нам подключились -- начинаем диалог
-
-        ctOutgoing:
-          if not GetConnectionConnected or not GetConnectionEstablished then
-            ConnectOutgoing; // мы цепляемся
       end;
-    except
-      on E: Exception do
-      begin
-        if Assigned(FOnException) then
-          FOnException(Self, E);
-      end;
+    finally
+      Unlock;
     end;
 
     Leave;
