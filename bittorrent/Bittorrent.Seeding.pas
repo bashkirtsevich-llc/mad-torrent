@@ -1284,14 +1284,15 @@ begin
           { sync! }
           peer.Sync;
         end else
-        if peer.ConnectionType = ctOutgoing then
+        if not weLoad and (peer.ConnectionType = ctOutgoing) then
         begin
           { отключаемся от пиров, к которым МЫ подключились, если загрузка завершена
             и пир в нас не заинтересован }
           {$IFDEF DEBUG}
           DebugOutput('disconnect ' + peer.Host);
           {$ENDIF}
-          peer.Disconnect;
+          RemovePeer(peer);
+          Break;
         end;
       end;
 
@@ -1499,6 +1500,8 @@ begin
     begin
       with FList[i] do
         FList[i] := TDownloadPieceQueueItem.Create(Peer, Piece);
+
+      Assert(Assigned(FList[i].Peer));
 
       Break;
     end;
