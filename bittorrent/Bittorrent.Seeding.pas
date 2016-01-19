@@ -68,14 +68,13 @@ type
         type
           TDownloadPieceQueueItem = record
             Peer: IPeer;
-            Piece: Integer;
             TimeStamp: TDateTime;
 
-            constructor Create(APeer: IPeer; APiece: Integer);
+            constructor Create(APeer: IPeer);
           end;
       private
         FBitField: TBitField;
-        FList: TList<TDownloadPieceQueueItem>; // надо заменить на словарь, он быстрее работает
+        FItems: TDictionary<Integer, TDownloadPieceQueueItem>;
         FOnTimeout: TProc<Integer, IPeer>;
         FOnCancel: TProc<Integer, IPeer>;
 
@@ -716,7 +715,7 @@ procedure TSeeding.OnPeerCancel(APeer: IPeer; APieceIndex, AOffset: Integer);
 begin
   Lock;
   try
-    FDownloadQueue.CancelRequest(APeer, APieceIndex, AOffset);
+    FUploadQueue.CancelRequest(APeer, APieceIndex, AOffset);
   finally
     Unlock;
   end;
@@ -1292,6 +1291,7 @@ begin
           DebugOutput('disconnect ' + peer.Host);
           {$ENDIF}
           peer.Shutdown;
+          RemovePeer(peer);
           Break;
         end;
       end;
@@ -1381,34 +1381,27 @@ constructor TSeeding.TDownloadPieceQueue.Create(APieceCount: Integer;
 begin
   inherited Create;
 
-  FList       := System.Generics.Collections.TList<TDownloadPieceQueueItem>.Create;
+  FItems      := TDictionary<Integer, TDownloadPieceQueueItem>.Create;
   FBitField   := TBitfield.Create(APieceCount);
   FOnTimeout  := AOnTimeout;
   FOnCancel   := AOnCancel;
 end;
 
 procedure TSeeding.TDownloadPieceQueue.Dequeue(APiece: Integer);
-var
-  it: TDownloadPieceQueueItem;
 begin
-  for it in FList do
-    if it.Piece = APiece then
-    begin
-      FList.Remove(it);
-      FBitField[APiece] := False;
-      Break;
-    end;
+  FItems.Remove(APiece);
+  FBitField[APiece] := False;
 end;
 
 destructor TSeeding.TDownloadPieceQueue.Destroy;
 begin
-  FList.Free;
+  FItems.Free;
   inherited;
 end;
 
 procedure TSeeding.TDownloadPieceQueue.Enqueue(APiece: Integer; APeer: IPeer);
 begin
-  FList.Add(TDownloadPieceQueueItem.Create(APeer, APiece));
+  FItems.Add(APiece, TDownloadPieceQueueItem.Create(APeer));
   FBitField[APiece] := True;
 end;
 
@@ -1419,51 +1412,43 @@ end;
 
 procedure TSeeding.TDownloadPieceQueue.CancelRequest(APeer: IPeer; APieceIndex,
   AOffset: Integer);
-var
-  i: Integer;
 begin
-  for i := FList.Count - 1 downto 0 do
-    with FList[i] do
-      if (Piece = APieceIndex) and (Peer.HashCode = APeer.HashCode) then
-      begin
-        FBitField[Piece] := False;
-        FList.Delete(i);
-      end;
+  FItems.Remove(APieceIndex);
+  FBitField[APieceIndex] := False;
 end;
 
 procedure TSeeding.TDownloadPieceQueue.CancelRequests(APeer: IPeer);
 var
   i: Integer;
 begin
-  for i := FList.Count - 1 downto 0 do
-    with FList[i] do
-      if Peer.HashCode = APeer.HashCode then
-      begin
-        FBitField[Piece] := False;
-        FList.Delete(i);
+  for i in FItems.Keys do
+    if FItems[i].Peer.HashCode = APeer.HashCode then
+    begin
+      FItems.Remove(i);
 
-        if Assigned(FOnCancel) then
-          FOnCancel(Piece, APeer);
-      end;
+      if Assigned(FOnCancel) then
+        FOnCancel(i, APeer);
+
+      Break;
+    end;
 end;
 
 function TSeeding.TDownloadPieceQueue.CanEnqueue(APeer: IPeer): Boolean;
 var
-  it: TDownloadPieceQueueItem;
-  i: Integer;
+  i, j: Integer;
 begin
-  Result := FList.Count < MaxPieceQueueSize;
+  Result := FItems.Count < MaxPieceQueueSize;
 
   if Result and Assigned(APeer) then
   begin
-    i := 0;
+    j := 0;
 
-    for it in FList do
-      if it.Peer.HashCode = APeer.HashCode then
+    for i in FItems.Keys do
+      if FItems[i].Peer.HashCode = APeer.HashCode then
       begin
-        Inc(i);
+        Inc(j);
 
-        if i >= MaxPeerPiecesCount then
+        if j >= MaxPeerPiecesCount then
           Exit(False);
       end;
   end;
@@ -1471,49 +1456,35 @@ end;
 
 procedure TSeeding.TDownloadPieceQueue.Timeout;
 var
-  it: TDownloadPieceQueueItem;
+  i: Integer;
   t: TDateTime;
 begin
   t := Now;
 
-  for it in FList do
-    if SecondsBetween(t, it.TimeStamp) > MaxPieceQueueTimeout then
-    begin
-      Assert(Assigned(it.Peer));
-
-      FList.Remove(it);
-      FBitField[it.Piece] := False;
-
+  for i in FItems.Keys do
+    if SecondsBetween(t, FItems[i].TimeStamp) > MaxPieceQueueTimeout then
+    try
       if Assigned(FOnTimeout) then
-        FOnTimeout(it.Piece, it.Peer);
-
-      Break;
+        FOnTimeout(i, FItems[i].Peer);
+    finally
+      FBitField[i] := False;
+      FItems.Remove(i);
     end;
 end;
 
 procedure TSeeding.TDownloadPieceQueue.Touch(APiece: Integer);
-var
-  i: Integer;
 begin
-  for i := 0 to FList.Count - 1 do
-    if FList[i].Piece = APiece then
-    begin
-      with FList[i] do
-        FList[i] := TDownloadPieceQueueItem.Create(Peer, Piece);
-
-      Assert(Assigned(FList[i].Peer));
-
-      Break;
-    end;
+  if FItems.ContainsKey(APiece) then
+    with FItems[APiece] do
+      FItems.AddOrSetValue(APiece, TDownloadPieceQueueItem.Create(Peer));
 end;
 
 { TSeeding.TDownloadPieceQueue.TDownloadPieceQueue }
 
 constructor TSeeding.TDownloadPieceQueue.TDownloadPieceQueueItem.Create(
-  APeer: IPeer; APiece: Integer);
+  APeer: IPeer);
 begin
   Peer := APeer;
-  Piece := APiece;
   TimeStamp := Now;
 end;
 
