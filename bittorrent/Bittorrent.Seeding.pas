@@ -1269,17 +1269,7 @@ begin
             end) or weLoad or alive;
         end;
 
-        { отключаемся от пиров, к которым МЫ подключились, если загрузка завершена
-          и пир в нас не заинтересован }
-        if (not weLoad) and (peer.ConnectionType = ctOutgoing) and not (pfTheyInterested in peer.Flags) then
-        begin
-          {$IFDEF DEBUG}
-          DebugOutput('disconnect ' + peer.Host);
-          {$ENDIF}
-
-          peer.Disconnect;
-          Break;
-        end else
+        if weLoad or (pfTheyInterested in peer.Flags) then
         begin
           (*
           // если мы качаем и с нас скачивают больше, чем отдают -- душим
@@ -1293,6 +1283,15 @@ begin
 
           { sync! }
           peer.Sync;
+        end else
+        if peer.ConnectionType = ctOutgoing then
+        begin
+          { отключаемся от пиров, к которым МЫ подключились, если загрузка завершена
+            и пир в нас не заинтересован }
+          {$IFDEF DEBUG}
+          DebugOutput('disconnect ' + peer.Host);
+          {$ENDIF}
+          peer.Disconnect;
         end;
       end;
 
@@ -1307,10 +1306,19 @@ begin
     if alive then
       Touch
     else
-    if SecondsBetween(t, FLastRequest) >= MaxIdleTime then
+    if (SecondsBetween(t, FLastRequest) >= MaxIdleTime) or (not weload and (
+          Length(TPrelude.Filter<IPeer>(FPeers.ToArray,
+            function(APeer: IPeer): Boolean
+            begin
+              Result := APeer.ConnectionType = ctIncoming;
+            end)
+          ) = 0
+        )
+      ) then
     begin
-      { ничего не качаем и ничего не раздаем -- переводим раздачу в пассивный режим, отключаемся от пиров }
-      FStates := FStates - [ssActive];
+      { мы скачали, а с нас не качают -- переводим раздачу в пассивный режим,
+        отключаемся от пиров }
+      Exclude(FStates, ssActive);
 
       DisconnectAllPeers;
 
