@@ -827,7 +827,8 @@ begin
 
         mmtData:
           begin
-            FMetafileMap.Add(md.Piece, md.Metadata); // проверять дубликаты
+            if not FMetafileMap.ContainsKey(md.Piece) then
+              FMetafileMap.Add(md.Piece, md.Metadata);
 
             tmp := TPrelude.Fold<Integer, TUniString>(
               TPrelude.Sort<Integer>(FMetafileMap.Keys.ToArray,
@@ -1469,7 +1470,7 @@ begin
   for it in FList do
     if SecondsBetween(t, it.TimeStamp) > MaxPieceQueueTimeout then
     begin
-      Assert(Assigned(it.Peer)); // почему срабатывает?
+      Assert(Assigned(it.Peer));
 
       FList.Remove(it);
       FBitField[it.Piece] := False;
