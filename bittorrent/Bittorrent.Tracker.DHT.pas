@@ -17,6 +17,7 @@ type
       DefaultAnnounceInterval = 25*60;
       DefaultRetrackInterval = 60;
   private
+    FTerminate: Boolean;
     FAnnounceTask: IAnnounceTask;
     FGetPeersTask: IGetPeersTask;
     procedure OnPeersFound(APeers: TArray<DHT.IPeer>);
@@ -27,6 +28,7 @@ type
   public
     constructor Create(AThreadPool: TThreadPool; AAnnounceTask: IAnnounceTask;
       AGetPeersTask: IGetPeersTask); reintroduce;
+    destructor Destroy; override;
   end;
 
 implementation
@@ -39,11 +41,19 @@ begin
   inherited Create(AThreadPool, AAnnounceTask.InfoHash.AsUniString,
     AAnnounceTask.Port, DefaultAnnounceInterval, DefaultRetrackInterval);
 
+  FTerminate    := False;
+
   FAnnounceTask := AAnnounceTask;
   FGetPeersTask := AGetPeersTask;
 
   FAnnounceTask.OnPeersFound := OnPeersFound;
   FGetPeersTask.OnPeersFound := OnPeersFound;
+end;
+
+destructor TDHTTracker.Destroy;
+begin
+  FTerminate := True;
+  inherited;
 end;
 
 procedure TDHTTracker.DoAnnounce;
@@ -68,7 +78,7 @@ begin
     t.Reset;
   end;
 
-  while b do
+  while b and not FTerminate do
   begin
     if not ATask.Busy then
       ATask.Sync;
