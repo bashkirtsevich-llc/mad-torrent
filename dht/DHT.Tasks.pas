@@ -253,7 +253,12 @@ end;
 procedure TSendQueryTask.DoSync;
 begin
   Enter;
-  FOnSendMessage(FTarget, FQuery, OnSent);
+  try
+    FOnSendMessage(FTarget, FQuery, OnSent);
+  except
+    Unlock;
+    raise;
+  end;
 end;
 
 function TSendQueryTask.GetTarget: INode;
@@ -263,19 +268,23 @@ end;
 
 procedure TSendQueryTask.OnSent(AArgs: ISendQueryEventArgs);
 begin
-  // If the message timed out and we we haven't already hit the maximum retries
-  // send again. Otherwise we propagate the eventargs through the Complete event.
-  if AArgs.TimedOut then
-    FTarget.FailedCount := FTarget.FailedCount + 1
-  else
-    FTarget.LastSeen := Now;
+  Lock;
+  try
+    // If the message timed out and we we haven't already hit the maximum retries
+    // send again. Otherwise we propagate the eventargs through the Complete event.
+    if AArgs.TimedOut then
+      FTarget.FailedCount := FTarget.FailedCount + 1
+    else
+      FTarget.LastSeen := Now;
 
-  if AArgs.TimedOut and (FRetries <= MsgRetryCount) then
-    Inc(FRetries)
-  else
-    RaiseComplete(AArgs); { всё ок, или время вышло, или не осталось попыток }
-
-  Leave;
+    if AArgs.TimedOut and (FRetries <= MsgRetryCount) then
+      Inc(FRetries)
+    else
+      RaiseComplete(AArgs); { всё ок, или время вышло, или не осталось попыток }
+  finally
+    Leave;
+    Unlock;
+  end;
 end;
 
 { TFindPeersTask }
