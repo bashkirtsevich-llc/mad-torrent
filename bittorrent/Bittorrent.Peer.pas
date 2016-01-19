@@ -826,7 +826,8 @@ procedure TPeer.DoSync;
 begin
   Enter;
 
-  FThreadPool.Exec(function : Boolean
+  if not FShutdown then
+    FThreadPool.Exec(function : Boolean
   var
     msg: IMessage;
     i: Integer;
@@ -834,72 +835,70 @@ begin
   begin
     Lock;
     try
-      try
-        if GetConnectionConnected and GetConnectionEstablished then
+      if GetConnectionConnected and GetConnectionEstablished then
+      begin
+        t := Now;
+        if SecondsBetween(t, FLastKeepAlive) >= KeepAliveInterval then
         begin
-          t := Now;
-          if SecondsBetween(t, FLastKeepAlive) >= KeepAliveInterval then
-          begin
-            KeepAlive;
-            FLastKeepAlive := t;
-          end;
-
-          { долго молчит -- отпинываем }
-          if SecondsBetween(t, FLastResponse) >= ConnectionTimeout then
-          begin
-            FConnection.Disconnect;
-            raise EPeerConnectionTimeout.Create('Connection timeout');
-          end;
-
-          { выплёвываем очередь сообщений в сеть (не даем отправить более MaxSendQueueSize сообщений) }
-          i := 0;
-          while (FSendQueue.Count > 0) and (i < MaxSendQueueSize) and GetConnectionConnected do
-          begin
-            FConnection.SendMessage(FSendQueue.Dequeue);
-            Inc(i);
-          end;
-
-          { пытаемся принять MaxRecvQueueSize сообщений }
-          i := 0;
-          while (i < MaxRecvQueueSize) and GetConnectionConnected do
-          begin
-            msg := FConnection.ReceiveMessage;
-            if Assigned(msg) then
-              DoHandleMessage(msg)
-            else
-              Break;
-
-            Inc(i);
-          end;
-
-          { обновить время последнего ответа }
-          if i > 0 then // small optimization against frequent call's of UtcNow
-            FLastResponse := t;
-
-          UpdateCounter; // обновляем счетчик трафика
-        end else
-        if not FShutdown then
-        case FConnection.ConnectionType of { контолируем соединение }
-          ctIncoming:
-            if GetConnectionConnected and not GetConnectionEstablished then
-              ConnectIncoming; // к нам подключились -- начинаем диалог
-
-          ctOutgoing:
-            if not GetConnectionConnected or not GetConnectionEstablished then
-              ConnectOutgoing; // мы цепляемся
+          KeepAlive;
+          FLastKeepAlive := t;
         end;
-      except
-        on E: Exception do
+
+        { долго молчит -- отпинываем }
+        if SecondsBetween(t, FLastResponse) >= ConnectionTimeout then
         begin
-          if Assigned(FOnException) then
-            FOnException(Self, E);
+          FConnection.Disconnect;
+          raise EPeerConnectionTimeout.Create('Connection timeout');
         end;
+
+        { выплёвываем очередь сообщений в сеть (не даем отправить более MaxSendQueueSize сообщений) }
+        i := 0;
+        while (FSendQueue.Count > 0) and (i < MaxSendQueueSize) and GetConnectionConnected do
+        begin
+          FConnection.SendMessage(FSendQueue.Dequeue);
+          Inc(i);
+        end;
+
+        { пытаемся принять MaxRecvQueueSize сообщений }
+        i := 0;
+        while (i < MaxRecvQueueSize) and GetConnectionConnected do
+        begin
+          msg := FConnection.ReceiveMessage;
+          if Assigned(msg) then
+            DoHandleMessage(msg)
+          else
+            Break;
+
+          Inc(i);
+        end;
+
+        { обновить время последнего ответа }
+        if i > 0 then // small optimization against frequent call's of UtcNow
+          FLastResponse := t;
+
+        UpdateCounter; // обновляем счетчик трафика
+      end else
+      if not FShutdown then
+      case FConnection.ConnectionType of { контолируем соединение }
+        ctIncoming:
+          if GetConnectionConnected and not GetConnectionEstablished then
+            ConnectIncoming; // к нам подключились -- начинаем диалог
+
+        ctOutgoing:
+          if not GetConnectionConnected or not GetConnectionEstablished then
+            ConnectOutgoing; // мы цепляемся
       end;
-    finally
-      Unlock;
+    except
+      on E: Exception do
+      begin
+        if Assigned(FOnException) then
+          FOnException(Self, E);
+      end;
     end;
 
     Leave;
+    Unlock;
+
     Result := False;
   end);
 end;
