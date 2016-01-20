@@ -206,7 +206,7 @@ type
     procedure MarkAsError; inline; // раздача с ошибкой
 
     function Require(AItem: ISeedingItem; AOffset, ALength: Int64): Boolean;
-    procedure FetchNext(APeer: IPeer);
+    procedure FetchNext(APeer: IPeer; AEndGame: Boolean = False);
 
     { обработчики событий пира }
     procedure OnPeerConnect(APeer: IPeer; AMessage: IMessage);
@@ -1192,8 +1192,7 @@ var
   peer: IPeer;
   want: TBitField;
   haveMD,
-  weLoad,
-  alive: Boolean;
+  weLoad, alive, endgame: Boolean;
   t: TTime;
 begin
   Lock;
@@ -1235,15 +1234,16 @@ begin
         { соединение (хендшейк пройден) установлено успешно и у нас есть метаданные }
         if peer.ConnectionEstablished and haveMD then { мы чето качаем }
         begin
-          { оптимизация: если не выставлен ни один бит в want, значит мы не качаем }
-          if weLoad and not want.AllFalse and
-            (peer.Bitfield.Len > 0) and not TBitField(want and peer.Bitfield).AllFalse then
+          endgame := weLoad and want.AllFalse and not FBitField.AllTrue;
+
+          if weLoad and (peer.Bitfield.Len > 0) and (endgame or
+            not TBitField(want and peer.Bitfield).AllFalse) then
           begin
             { он нам интересен, просим нас раздушить }
             if [pfWeInterested] * peer.Flags = [] then
               peer.Interested
             else
-              FetchNext(peer); { пробуем что-нибудь с него скачать }
+              FetchNext(peer, endgame); { пробуем что-нибудь с него скачать }
           end;
 
           { отвечаем на запросы }
@@ -1333,13 +1333,13 @@ begin
   end;
 end;
 
-procedure TSeeding.FetchNext(APeer: IPeer);
+procedure TSeeding.FetchNext(APeer: IPeer; AEndGame: Boolean = False);
 var
   idx: Integer;
 begin
   Lock;
   try
-    if ([pfTheyChoke] * APeer.Flags = []) and FDownloadQueue.CanEnqueue(APeer) then
+    if ([pfTheyChoke] * APeer.Flags = []) and (AEndGame or FDownloadQueue.CanEnqueue(APeer)) then
       for idx in FPiecePicker.Fetch(APeer.Bitfield, FPeersHave, GetWant) do
       begin
         {$IFDEF DEBUG}
