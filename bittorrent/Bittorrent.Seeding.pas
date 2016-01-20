@@ -826,41 +826,44 @@ begin
 
         mmtData:
           begin
-            if not FMetafileMap.ContainsKey(md.Piece) then
-              FMetafileMap.Add(md.Piece, md.Metadata);
-
-            tmp := TPrelude.Fold<Integer, TUniString>(
-              TPrelude.Sort<Integer>(FMetafileMap.Keys.ToArray,
-                TDelegatedComparer<Integer>.Create(
-                  function (const Left, Right: Integer): Integer
-                  begin
-                    Result := Left - Right;
-                  end
-                )
-              ), string.Empty,
-              function (X: TUniString; Y: Integer): TUniString
-              begin
-                Result := X + FMetafileMap[Y];
-              end
-            );
-
-            if tmp.Len = FMetadataSize then
+            if not(ssHaveMetadata in FStates) then
             begin
-              { check infohash }
-              if SHA1(tmp) = FInfoHash then
+              if not FMetafileMap.ContainsKey(md.Piece) then
+                FMetafileMap.Add(md.Piece, md.Metadata);
+
+              tmp := TPrelude.Fold<Integer, TUniString>(
+                TPrelude.Sort<Integer>(FMetafileMap.Keys.ToArray,
+                  TDelegatedComparer<Integer>.Create(
+                    function (const Left, Right: Integer): Integer
+                    begin
+                      Result := Left - Right;
+                    end
+                  )
+                ), string.Empty,
+                function (X: TUniString; Y: Integer): TUniString
+                begin
+                  Result := X + FMetafileMap[Y];
+                end
+              );
+
+              if tmp.Len = FMetadataSize then
               begin
-                { успешно загрузили метафайл }
-                mf := TMetaFile.Create(tmp);
-                InitMetadata(mf);
+                { check infohash }
+                if SHA1(tmp) = FInfoHash then
+                begin
+                  { успешно загрузили метафайл }
+                  mf := TMetaFile.Create(tmp);
+                  InitMetadata(mf);
 
-                FStates := FStates + [ssActive, ssDownloading];
+                  FStates := FStates + [ssActive, ssDownloading];
 
-                if Assigned(FOnMetadataLoaded) then
-                  FOnMetadataLoaded(Self, mf);
-              end else
-                FMetadataSize := 0; { метаданные загрузились с ошибкой }
+                  if Assigned(FOnMetadataLoaded) then
+                    FOnMetadataLoaded(Self, mf);
+                end else
+                  FMetadataSize := 0; { метаданные загрузились с ошибкой }
 
-              FMetafileMap.Clear;
+                FMetafileMap.Clear;
+              end;
             end;
           end;
 
