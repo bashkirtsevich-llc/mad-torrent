@@ -1336,16 +1336,25 @@ end;
 procedure TSeeding.FetchNext(APeer: IPeer; AEndGame: Boolean = False);
 var
   idx: Integer;
+  bf: TBitField;
 begin
   Lock;
   try
     if ([pfTheyChoke] * APeer.Flags = []) and (AEndGame or FDownloadQueue.CanEnqueue(APeer)) then
-      for idx in FPiecePicker.Fetch(APeer.Bitfield, FPeersHave, GetWant) do
+    begin
+      if AEndGame then
+        bf := not FBitField
+      else
+        bf := GetWant;
+
+      for idx in FPiecePicker.Fetch(APeer.Bitfield, FPeersHave, bf) do
       begin
         {$IFDEF DEBUG}
         DebugOutput('fetch ' + idx.ToString);
         {$ENDIF}
-        FDownloadQueue.Enqueue(idx, APeer);
+
+        if not AEndGame then
+          FDownloadQueue.Enqueue(idx, APeer);
 
         TPiece.EnumBlocks(FMetafile.PieceLength[idx],
           procedure (AOffset, ALength: Integer)
@@ -1353,6 +1362,7 @@ begin
             APeer.Request(idx, AOffset, ALength);
           end);
       end;
+    end;
   finally
     Unlock;
   end;
