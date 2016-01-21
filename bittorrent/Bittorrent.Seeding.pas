@@ -130,6 +130,7 @@ type
     FFileSystem: IFileSystem;
     FDownloadPath: string;
     FCounter: ICounter;
+    FEndGame: Boolean;
     FDownloadQueue: IDownloadPieceQueue; // список кусков, которые мы запросили (чтобы не запрашивать повторно)
     FUploadQueue: IUploadPieceQueue; // список кусков, которые с нас запросили
     FPiecePicker: IRequestFirstPicker;
@@ -206,7 +207,7 @@ type
     procedure MarkAsError; inline; // раздача с ошибкой
 
     function Require(AItem: ISeedingItem; AOffset, ALength: Int64): Boolean;
-    procedure FetchNext(APeer: IPeer; AEndGame: Boolean = False);
+    procedure FetchNext(APeer: IPeer);
 
     { обработчики событий пира }
     procedure OnPeerConnect(APeer: IPeer; AMessage: IMessage);
@@ -402,6 +403,7 @@ begin
 
   FBlackList      := TDictionary<string, TDateTime>.Create;
 
+  FEndGame        := False;
   FCounter        := TCounter.Create;
   FLock           := TObject.Create;
   FPeers          := TList<IPeer>.Create;
@@ -967,8 +969,13 @@ begin
         {if it.HaveMask[AIndex] then  (типа разослать только тем, у кого есть кусок?)}
         it.SendHave(APieceIndex);
 
-        { рассылаем всем отмену запрошенного куска, если запрашивали }
-        //it.Cancel();
+        { рассылаем всем отмену запрошенного куска, если запрашивали в режиме EndGame }
+        if FEndGame then
+          TPiece.EnumBlocks(FMetafile.PieceLength[APieceIndex],
+            procedure (AOffset, ALength: Integer)
+            begin
+              it.Cancel(APieceIndex, AOffset);
+            end);
       end;
 
       FPiecesBuf.Remove(APieceIndex);
@@ -1192,7 +1199,7 @@ var
   peer: IPeer;
   want: TBitField;
   haveMD,
-  weLoad, alive, endgame: Boolean;
+  weLoad, alive: Boolean;
   t: TTime;
 begin
   Lock;
@@ -1234,16 +1241,16 @@ begin
         { соединение (хендшейк пройден) установлено успешно и у нас есть метаданные }
         if peer.ConnectionEstablished and haveMD then { мы чето качаем }
         begin
-          endgame := weLoad and want.AllFalse and not FBitField.AllTrue;
+          FEndGame := weLoad and want.AllFalse and not FBitField.AllTrue;
 
-          if weLoad and (peer.Bitfield.Len > 0) and (endgame or
+          if weLoad and (peer.Bitfield.Len > 0) and (FEndGame or
             not TBitField(want and peer.Bitfield).AllFalse) then
           begin
             { он нам интересен, просим нас раздушить }
             if [pfWeInterested] * peer.Flags = [] then
               peer.Interested
             else
-              FetchNext(peer, endgame); { пробуем что-нибудь с него скачать }
+              FetchNext(peer); { пробуем что-нибудь с него скачать }
           end;
 
           { отвечаем на запросы }
@@ -1333,16 +1340,16 @@ begin
   end;
 end;
 
-procedure TSeeding.FetchNext(APeer: IPeer; AEndGame: Boolean = False);
+procedure TSeeding.FetchNext(APeer: IPeer);
 var
   idx: Integer;
   bf: TBitField;
 begin
   Lock;
   try
-    if ([pfTheyChoke] * APeer.Flags = []) and (AEndGame or FDownloadQueue.CanEnqueue(APeer)) then
+    if ([pfTheyChoke] * APeer.Flags = []) and (FEndGame or FDownloadQueue.CanEnqueue(APeer)) then
     begin
-      if AEndGame then
+      if FEndGame then
         bf := not FBitField
       else
         bf := GetWant;
@@ -1353,7 +1360,7 @@ begin
         DebugOutput('fetch ' + idx.ToString);
         {$ENDIF}
 
-        if not AEndGame then
+        if not FEndGame then
           FDownloadQueue.Enqueue(idx, APeer);
 
         TPiece.EnumBlocks(FMetafile.PieceLength[idx],
