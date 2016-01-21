@@ -129,6 +129,8 @@ type
     procedure ConnectOutgoing; { отправка и прием хендшейка наружу }
     procedure ConnectIncoming; { прием и отправка хендшейка извне }
 
+    procedure RaiseInvalidPeer; inline;
+
     procedure DoHandleMessage(AMessage: IMessage); inline;
     procedure DoHandleHandShakeMessage(AMessage: IMessage); inline;
     procedure DoChoke; inline;
@@ -187,7 +189,7 @@ begin
     FLastKeepAlive  := Now;
   except
     FConnection.Disconnect;
-    raise EPeerInvalidPeer.Create('Invalid peer');
+    RaiseInvalidPeer;
   end;
 end;
 
@@ -211,11 +213,8 @@ begin
     FLastResponse   := Now;
     FLastKeepAlive  := FLastResponse;
   except
-    on E: Exception do
-    begin
-      FConnection.Disconnect;
-      raise EPeerInvalidPeer.Create('Invalid peer');
-    end;
+    FConnection.Disconnect;
+    RaiseInvalidPeer;
   end;
 end;
 
@@ -559,6 +558,11 @@ begin
   finally
     Leave;
   end;
+end;
+
+procedure TPeer.RaiseInvalidPeer;
+begin
+  raise EPeerInvalidPeer.Create('Invalid peer');
 end;
 
 procedure TPeer.Request(AIndex, AOffset, ALength: Integer);
