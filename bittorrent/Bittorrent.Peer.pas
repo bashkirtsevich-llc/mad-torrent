@@ -130,6 +130,7 @@ type
     procedure ConnectIncoming; { прием и отправка хендшейка извне }
 
     procedure RaiseInvalidPeer; inline;
+    procedure RaisePeerNoResponse; inline;
 
     procedure DoHandleMessage(AMessage: IMessage); inline;
     procedure DoHandleHandShakeMessage(AMessage: IMessage); inline;
@@ -175,18 +176,21 @@ begin
   try
     msg := FConnection.ReceiveMessage(True);
     { проверки }
-    Assert(Assigned(msg));
-    DoHandleHandShakeMessage(msg);
+    if Assigned(msg) then
+    begin
+      DoHandleHandShakeMessage(msg);
 
-    if Assigned(FOnConnect) then
-      FOnConnect(Self, msg);
+      if Assigned(FOnConnect) then
+        FOnConnect(Self, msg);
 
-    { отсылаем ответный хендшейк, если FOnConnect не сгенерил исключение }
-    FConnection.SendMessage(GetHandshakeMessage);
+      { отсылаем ответный хендшейк, если FOnConnect не сгенерил исключение }
+      FConnection.SendMessage(GetHandshakeMessage);
 
-    FConnectionEstablished := True; { успешно! }
-    FLastResponse   := Now;
-    FLastKeepAlive  := Now;
+      FConnectionEstablished := True; { успешно! }
+      FLastResponse   := Now;
+      FLastKeepAlive  := Now;
+    end else
+      RaisePeerNoResponse;
   except
     FConnection.Disconnect;
     RaiseInvalidPeer;
@@ -203,15 +207,18 @@ begin
     FConnection.SendMessage(GetHandshakeMessage);
 
     msg := FConnection.ReceiveMessage(True);
-    Assert(Assigned(msg));
-    DoHandleHandShakeMessage(msg);
+    if Assigned(msg) then
+    begin
+      DoHandleHandShakeMessage(msg);
 
-    if Assigned(FOnConnect) then
-      FOnConnect(Self, msg);
+      if Assigned(FOnConnect) then
+        FOnConnect(Self, msg);
 
-    FConnectionEstablished := True; { успешно! }
-    FLastResponse   := Now;
-    FLastKeepAlive  := FLastResponse;
+      FConnectionEstablished := True; { успешно! }
+      FLastResponse   := Now;
+      FLastKeepAlive  := FLastResponse;
+    end else
+      RaisePeerNoResponse;
   except
     FConnection.Disconnect;
     RaiseInvalidPeer;
@@ -563,6 +570,11 @@ end;
 procedure TPeer.RaiseInvalidPeer;
 begin
   raise EPeerInvalidPeer.Create('Invalid peer');
+end;
+
+procedure TPeer.RaisePeerNoResponse;
+begin
+  raise EPeerNoResponse.Create('Peer has no response');
 end;
 
 procedure TPeer.Request(AIndex, AOffset, ALength: Integer);

@@ -820,6 +820,7 @@ type
   EPeerException = class(EBittorrentException);
   EPeerConnectionTimeout = class(EPeerException);
   EPeerInvalidPeer = class(EPeerException);
+  EPeerNoResponse = class(EPeerException);
   EUnknownMessage = class(EPeerException);
 
   ESeedingException = class(EBittorrentException);
