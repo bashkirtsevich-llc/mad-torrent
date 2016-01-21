@@ -427,7 +427,7 @@ begin
         target := (t as ISendQueryTask).Target;
         index := FQueriedNodes.Values.IndexOf(target);
         args := e as ISendQueryEventArgs;
-        if (index >= 0) and ((index >= TBucket.MaxCapacity) or args.TimedOut) then
+        if (index >= TBucket.MaxCapacity) or (args.TimedOut and (index >= 0)) then
           FQueriedNodes.Delete(index);
 
         if not args.TimedOut then
