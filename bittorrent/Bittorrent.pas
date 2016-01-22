@@ -470,6 +470,7 @@ type
 
   IMetaFile = interface
   ['{E5ACCB77-FCEC-4DAF-8216-4CF23E63E30B}']
+    function GetName: string;
     function GetTotalSize: UInt64;
     function GetPieceHash(APieceIndex: Integer): TUniString;
     function GetPieceLength(APieceIndex: Integer): Integer;
@@ -483,6 +484,7 @@ type
     function GetMetadata: TUniString;
     function GetTrackers: TEnumerable<string>;
 
+    property Name: string read GetName;
     property TotalSize: UInt64 read GetTotalSize;
     property PiecesCount: Integer read GetPiecesCount;
     property PiecesLength: Integer read GetPiecesLength;
@@ -971,8 +973,10 @@ begin
   try
     if not FSeedings.TryGetValue(AMetaFile.InfoHash, Result) then
     begin
-      Result := TSeeding.Create(ADownloadPath, FThreads, FClientID, AMetaFile,
-        TBitField.FromUniString(ABitField), AStates, FListenPort);
+      Result := TSeeding.Create(
+        IncludeTrailingPathDelimiter(ADownloadPath) + NormalizePath(AMetaFile.Name),
+        FThreads, FClientID, AMetaFile, TBitField.FromUniString(ABitField),
+        AStates, FListenPort);
 
       RegisterSeeding(Result);
     end;

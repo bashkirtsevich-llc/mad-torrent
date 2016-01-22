@@ -24,12 +24,14 @@ type
   private
     FInfoHash: TUniString;
     FMetadata: TUniString;
+    FName: string;
     FFiles: TList<IFileItem>;
     FPieceHashes: TArray<TUniString>;
     FPieceLength: Integer;
     FTotalSize: UInt64;
     FTrackers: TList<string>;
 
+    function GetName: string; inline;
     function GetTotalSize: UInt64; inline;
     function GetPieceHash(APieceIndex: Integer): TUniString; inline;
     function GetPieceLength(APieceIndex: Integer): Integer; inline;
@@ -62,6 +64,7 @@ begin
 
   FFiles    := TList<IFileItem>.Create;
   FTrackers := TList<string>.Create;
+  FName     := string.Empty;
 
   BencodeParse(AMetadata, False,
     function (ALen: Integer; AValue: IBencodedValue): Boolean
@@ -124,6 +127,12 @@ begin
         with Items[PieceLengthKey] as IBencodedInteger do
           FPieceLength := Value;
 
+        if ContainsKey(NameKey) then
+        begin
+          Assert(Supports(Items[NameKey], IBencodedString));
+          FName := UTF8ToString((Items[NameKey] as IBencodedString).Value.AsRawByteString);
+        end;
+
         FTotalSize := 0;
 
         if ContainsKey(FilesKey) then
@@ -163,22 +172,19 @@ begin
             end
           );
         end else
+        if not FName.IsEmpty and ContainsKey(LengthKey) then
         begin
-          if ContainsKey(NameKey) and ContainsKey(LengthKey) then
-          begin
-            { торрент с одним файлом }
-            Assert(Supports(Items[NameKey], IBencodedString));
-            Assert(Supports(Items[LengthKey], IBencodedInteger));
+          { торрент с одним файлом }
+          Assert(Supports(Items[LengthKey], IBencodedInteger));
 
-            FTotalSize := FFiles[FFiles.Add(TFileItem.Create(
-                UTF8ToString((Items[NameKey] as IBencodedString).Value.AsRawByteString),
-                (Items[LengthKey] as IBencodedInteger).Value,
-                0,
-                FPieceLength)
-            )].FileSize;
-          end else
-            raise EMetafileException.Create('Invalid metafile structure');
-        end;
+          FTotalSize := FFiles[FFiles.Add(TFileItem.Create(
+              FName,
+              (Items[LengthKey] as IBencodedInteger).Value,
+              0,
+              FPieceLength)
+          )].FileSize;
+        end else
+          raise EMetafileException.Create('Invalid metafile structure');
       end;
 
       Result := True;
@@ -255,6 +261,11 @@ end;
 function TMetafile.GetMetadata: TUniString;
 begin
   Result := FMetadata;
+end;
+
+function TMetafile.GetName: string;
+begin
+  Result := FName;
 end;
 
 function TMetafile.GetPieceHash(APieceIndex: Integer): TUniString;
