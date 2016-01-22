@@ -4,7 +4,7 @@ interface
 
 uses
   System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
-  System.Classes, System.DateUtils, System.Math,
+  System.Classes, System.DateUtils, System.Math, System.IOUtils,
   Basic.UniString,
   Common.BusyObj, Common.ThreadPool, Common.AccurateTimer, Common.Prelude,
   Bittorrent.Bitfield,
@@ -796,6 +796,8 @@ type
 
     procedure BindSeedingDHT(ASeeding: ISeeding); inline;
 
+    function NormalizePath(const APath: string): string;
+
     function AddTorrent(AMagnetLink: IMagnetLink;
       const ADownloadPath: string): ISeeding; overload; inline;
     function AddTorrent(AMetaFile: IMetaFile;
@@ -898,13 +900,15 @@ function TBittorrent.AddTorrent(AMagnetLink: IMagnetLink;
 begin
   Lock;
   try
-    if not FSeedings.TryGetValue(AMagnetLink.InfoHash, Result) then
-    begin
-      Result := TSeeding.Create(ADownloadPath, FThreads, FClientID,
-        AMagnetLink.InfoHash, FListenPort);
+    with AMagnetLink do
+      if not FSeedings.TryGetValue(InfoHash, Result) then
+      begin
+        Result := TSeeding.Create(
+          IncludeTrailingPathDelimiter(ADownloadPath) + NormalizePath(DisplayName),
+          FThreads, FClientID, InfoHash, FListenPort);
 
-      RegisterSeeding(Result);
-    end;
+        RegisterSeeding(Result);
+      end;
   finally
     Unlock;
   end;
@@ -1096,6 +1100,17 @@ end;
 procedure TBittorrent.Lock;
 begin
   System.TMonitor.Enter(FLock);
+end;
+
+function TBittorrent.NormalizePath(const APath: string): string;
+var
+  c: Char;
+begin
+  Result := string.Empty;
+
+  for c in APath do
+    if TPath.IsValidPathChar(c) then
+      Result := Result + c;
 end;
 
 procedure TBittorrent.OnDHTReady(AEngine: IDHTEngine);

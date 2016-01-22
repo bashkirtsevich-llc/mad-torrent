@@ -33,7 +33,9 @@ constructor TMagnetLink.Create(const AURL: string);
 begin
   inherited Create;
 
-  FTrackers := TList<string>.Create;
+  FInfoHash.Len := 0;
+  FTrackers     := TList<string>.Create;
+  FDisplayName  := string.Empty;
 
   ParseMagnetLink(AURL);
 end;
@@ -92,7 +94,7 @@ procedure TMagnetLink.ParseMagnetLink(const AURL: string);
       FTrackers.Add(TIdURI.URLDecode(AValue))
     else
     if AKey = 'dn' then // display name
-      FDisplayName := AValue;
+      FDisplayName := TIdURI.URLDecode(AValue);
     {
     "as": // Acceptable Source
     "xl": // exact length
