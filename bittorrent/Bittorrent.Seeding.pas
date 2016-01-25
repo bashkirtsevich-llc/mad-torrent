@@ -24,6 +24,7 @@ type
       MaxPieceQueueTimeout = 60;  { секунд (тоже зависит от скорости) }
       MaxPieceRequestCount = 8;   { на сколько запросов мы можем ответить за проход }
       CacheClearInterval   = 5;   { секунд }
+      DefaultBlackListTime = 10;  { минут }
     type
       IPieceQueue = interface
       ['{2A153346-D39E-48CE-9D84-7FFD5186C83A}']
@@ -121,6 +122,7 @@ type
     FLastRequest: TDateTime;
     FLastCacheClear: TDateTime;
     FBlackList: TDictionary<string, TDateTime>;
+    FBlackListTime: Integer;
     FLock: TObject;
     FMetafile: IMetaFile;
     FMetafileMap: TDictionary<Integer, TUniString>;
@@ -239,12 +241,13 @@ type
     procedure DoSync; override;
   public
     constructor Create(const ADownloadPath: string; AThreadPoolEx: TThreadPool;
-      const AClientID, AInfoHash: TUniString; AListenPort: TIdPort); reintroduce; overload;
+      const AClientID, AInfoHash: TUniString; AListenPort: TIdPort;
+      ABlackListTime: Integer = DefaultBlackListTime); reintroduce; overload;
 
     constructor Create(const ADownloadPath: string; AThreadPoolEx: TThreadPool;
       const AClientID: TUniString; AMetafile: IMetaFile;
       const ABitField: TBitField; AStates: TSeedingStates;
-      AListenPort: TIdPort); reintroduce; overload;
+      AListenPort: TIdPort; ABlackListTime: Integer = DefaultBlackListTime); reintroduce; overload;
     destructor Destroy; override;
   end;
 
@@ -361,11 +364,13 @@ end;
 
 constructor TSeeding.Create(const ADownloadPath: string;
   AThreadPoolEx: TThreadPool; const AClientID: TUniString; AMetafile: IMetaFile;
-  const ABitField: TBitField; AStates: TSeedingStates; AListenPort: TIdPort);
+  const ABitField: TBitField; AStates: TSeedingStates; AListenPort: TIdPort;
+  ABlackListTime: Integer);
 begin
   Assert(Assigned(AMetafile));
 
-  Create(ADownloadPath, AThreadPoolEx, AClientID, AMetafile.InfoHash, AListenPort);
+  Create(ADownloadPath, AThreadPoolEx, AClientID, AMetafile.InfoHash, AListenPort,
+    ABlackListTime);
 
   { init metadata }
   InitMetadata(AMetafile);
@@ -385,7 +390,7 @@ end;
 
 constructor TSeeding.Create(const ADownloadPath: string;
   AThreadPoolEx: TThreadPool; const AClientID, AInfoHash: TUniString;
-  AListenPort: TIdPort);
+  AListenPort: TIdPort; ABlackListTime: Integer);
 begin
   inherited Create;
 
@@ -402,6 +407,7 @@ begin
   FMetadataSize   := 0;
 
   FBlackList      := TDictionary<string, TDateTime>.Create;
+  FBlackListTime  := ABlackListTime;
 
   FEndGame        := False;
   FCounter        := TCounter.Create;
@@ -1074,7 +1080,7 @@ begin
   t := Now;
 
   for h in FBlackList.Keys do
-    if MinutesBetween(t, FBlackList[h]) >= 10 then
+    if MinutesBetween(t, FBlackList[h]) >= FBlackListTime then
       FBlackList.Remove(h);
 end;
 
