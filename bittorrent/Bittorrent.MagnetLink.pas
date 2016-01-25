@@ -94,7 +94,7 @@ procedure TMagnetLink.ParseMagnetLink(const AURL: string);
       FTrackers.Add(TIdURI.URLDecode(AValue))
     else
     if AKey = 'dn' then // display name
-      FDisplayName := TIdURI.URLDecode(AValue);
+      FDisplayName := TIdURI.URLDecode(AValue.Replace('+', ' '));
     {
     "as": // Acceptable Source
     "xl": // exact length
