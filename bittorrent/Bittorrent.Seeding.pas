@@ -1097,6 +1097,7 @@ begin
 
     RemovePeerCallbacks(APeer);
 
+    FEndGameList.Remove(APeer);
     FPeers.Remove(APeer);
   finally
     Unlock;
@@ -1343,6 +1344,7 @@ begin
 
       DisconnectAllPeers;
 
+      FEndGameList.Clear;
       FPeers.Clear;
     end;
   finally
