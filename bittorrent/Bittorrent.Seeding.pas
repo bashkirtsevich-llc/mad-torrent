@@ -133,6 +133,7 @@ type
     FDownloadPath: string;
     FCounter: ICounter;
     FEndGame: Boolean;
+    FEndGameList: TDictionary<IPeer, TArray<Integer>>;
     FDownloadQueue: IDownloadPieceQueue; // список кусков, которые мы запросили (чтобы не запрашивать повторно)
     FUploadQueue: IUploadPieceQueue; // список кусков, которые с нас запросили
     FPiecePicker: IRequestFirstPicker;
@@ -410,6 +411,7 @@ begin
   FBlackListTime  := ABlackListTime;
 
   FEndGame        := False;
+  FEndGameList    := TDictionary<IPeer, TArray<Integer>>.Create;
   FCounter        := TCounter.Create;
   FLock           := TObject.Create;
   FPeers          := TList<IPeer>.Create;
@@ -446,6 +448,7 @@ begin
 
   DisconnectAllPeers;
 
+  FEndGameList.Free;
   FPeers.Free;
   FTrackers.Free;
   FItems.Free;
@@ -996,6 +999,7 @@ begin
           if pfWeInterested in it.Flags then
             it.NotInterested;
       end else
+      if not FEndGame then
         FetchNext(APeer);
     finally
       Update;
@@ -1350,6 +1354,7 @@ procedure TSeeding.FetchNext(APeer: IPeer);
 var
   idx: Integer;
   bf: TBitField;
+  pcs: TArray<Integer>;
 begin
   Lock;
   try
@@ -1362,12 +1367,22 @@ begin
 
       for idx in FPiecePicker.Fetch(APeer.Bitfield, FPeersHave, bf) do
       begin
+        if FEndGame then
+        begin
+          FEndGameList.TryGetValue(APeer, pcs);
+
+          if (Length(pcs) = 0) or (TPrelude.ElemIndex<Integer>(pcs, idx) = -1) then
+          begin
+            TAppender.Append<Integer>(pcs, idx);
+            FEndGameList.AddOrSetValue(APeer, pcs);
+          end else
+            Continue;
+        end else
+          FDownloadQueue.Enqueue(idx, APeer);
+
         {$IFDEF DEBUG}
         DebugOutput('fetch ' + idx.ToString);
         {$ENDIF}
-
-        if not FEndGame then
-          FDownloadQueue.Enqueue(idx, APeer);
 
         TPiece.EnumBlocks(FMetafile.PieceLength[idx],
           procedure (AOffset, ALength: Integer)
