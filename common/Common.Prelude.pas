@@ -21,6 +21,13 @@ type
       ACallBack: TFunc<T, TResult>): TArray<TResult>; overload; static;
     { foreach }
     class procedure Foreach<T>(const AData: TArray<T>; ACallBack: TProc<T>); static;
+    { find }
+    class function ElemIndex<T>(const AData: TArray<T>; AElem: T; AComparer: IComparer<T> = nil): Integer; static;
+    class function ElemIndices<T>(const AData: TArray<T>; AElem: T; AComparer: IComparer<T> = nil): TArray<Integer>; static;
+    { find }
+    class function Find<T>(const AData: TArray<T>; ADefault: T; ACallBack: TPredicate<T>): T; static;
+    class function FindIndex<T>(const AData: TArray<T>; ACallBack: TPredicate<T>): Integer; static;
+    class function FindIndices<T>(const AData: TArray<T>; ACallBack: TPredicate<T>): TArray<Integer>; static;
     { GroupBy }
     class function GroupBy<T>(const AData: TArray<T>;
       ACallBack: TFunc<T, T, Boolean>): TArray<TArray<T>>; static;
@@ -91,6 +98,40 @@ begin
   end;
 end;
 
+class function TPrelude.ElemIndex<T>(const AData: TArray<T>; AElem: T;
+  AComparer: IComparer<T>): Integer;
+var
+  i: Integer;
+  c: IComparer<T>;
+begin
+  if Assigned(AComparer) then
+    c := AComparer
+  else
+    c := TComparer<T>.Default;
+
+  for i := 0 to Length(AData) - 1 do
+    if c.Compare(AData[i], AElem) = 0 then
+      Exit(i);
+
+  Result := -1;
+end;
+
+class function TPrelude.ElemIndices<T>(const AData: TArray<T>; AElem: T;
+  AComparer: IComparer<T>): TArray<Integer>;
+var
+  i: Integer;
+  c: IComparer<T>;
+begin
+  if Assigned(AComparer) then
+    c := AComparer
+  else
+    c := TComparer<T>.Default;
+
+  for i := 0 to Length(AData) - 1 do
+    if c.Compare(AData[i], AElem) = 0 then
+      TAppender.Append<Integer>(Result, i);
+end;
+
 class function TPrelude.Filter<T>(const AData: TArray<T>;
   ACallBack: TPredicate<T>): TArray<T>;
 var
@@ -103,6 +144,46 @@ begin
   for it in AData do
     if ACallBack(it) then
       TAppender.Append<T>(Result, it);
+end;
+
+class function TPrelude.Find<T>(const AData: TArray<T>; ADefault: T;
+  ACallBack: TPredicate<T>): T;
+var
+  it: T;
+begin
+  Assert(Assigned(ACallBack));
+
+  for it in AData do
+    if ACallBack(it) then
+      Exit(it);
+
+  Result := ADefault;
+end;
+
+class function TPrelude.FindIndex<T>(const AData: TArray<T>;
+  ACallBack: TPredicate<T>): Integer;
+var
+  i: Integer;
+begin
+  Assert(Assigned(ACallBack));
+
+  for i := 0 to Length(AData) - 1 do
+    if ACallBack(AData[i]) then
+      Exit(i);
+
+  Result := -1;
+end;
+
+class function TPrelude.FindIndices<T>(const AData: TArray<T>;
+  ACallBack: TPredicate<T>): TArray<Integer>;
+var
+  i: Integer;
+begin
+  Assert(Assigned(ACallBack));
+
+  for i := 0 to Length(AData) - 1 do
+    if ACallBack(AData[i]) then
+      TAppender.Append<Integer>(Result, i);
 end;
 
 class function TPrelude.Fold<T, TResult>(const AData: TArray<T>;
