@@ -906,7 +906,8 @@ begin
       if not FSeedings.TryGetValue(InfoHash, Result) then
       begin
         Result := TSeeding.Create(
-          IncludeTrailingPathDelimiter(ADownloadPath) + NormalizePath(DisplayName),
+          IncludeTrailingPathDelimiter(ADownloadPath) +
+            NormalizePath(DisplayName.Trim),
           FThreads, FClientID, InfoHash, FListenPort);
 
         RegisterSeeding(Result);
@@ -974,7 +975,8 @@ begin
     if not FSeedings.TryGetValue(AMetaFile.InfoHash, Result) then
     begin
       Result := TSeeding.Create(
-        IncludeTrailingPathDelimiter(ADownloadPath) + NormalizePath(AMetaFile.Name),
+        IncludeTrailingPathDelimiter(ADownloadPath) +
+          NormalizePath(AMetaFile.Name.Trim),
         FThreads, FClientID, AMetaFile, TBitField.FromUniString(ABitField),
         AStates, FListenPort);
 
@@ -1113,7 +1115,7 @@ begin
   Result := string.Empty;
 
   for c in APath do
-    if TPath.IsValidPathChar(c) then
+    if TPath.IsValidPathChar(c) and TPath.IsValidFileNameChar(c) then
       Result := Result + c;
 end;
 
