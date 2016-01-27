@@ -65,7 +65,8 @@ begin
   SetLength(Result, 0);
 
   for node in ANewNodes do
-    if not ACurrentNodes.ContainsValue(node.ID) then
+    if TPrelude.ElemIndex<TNodeID>(ACurrentNodes.Values.ToArray, node.ID,
+      NodeIDComparer) = -1 then
     begin
       distance := node.ID xor ATarget;
 
