@@ -862,6 +862,17 @@ begin
 
         UpdateCounter; // обновляем счетчик трафика
       end else
+      if not FDisconnecting then
+      case FConnection.ConnectionType of { контолируем соединение }
+        ctIncoming:
+          if GetConnectionConnected and not GetConnectionEstablished then
+            ConnectIncoming; // к нам подключились -- начинаем диалог
+
+        ctOutgoing:
+          if not GetConnectionConnected or not GetConnectionEstablished then
+            ConnectOutgoing; // мы цепляемся
+      end;
+
       if FDisconnecting then
       begin
         if GetConnectionConnected then
@@ -871,19 +882,6 @@ begin
 
         DoDisconnect;
       end else
-      begin
-        FDisconnecting := False;
-
-        case FConnection.ConnectionType of { контолируем соединение }
-          ctIncoming:
-            if GetConnectionConnected and not GetConnectionEstablished then
-              ConnectIncoming; // к нам подключились -- начинаем диалог
-
-          ctOutgoing:
-            if not GetConnectionConnected or not GetConnectionEstablished then
-              ConnectOutgoing; // мы цепляемся
-        end;
-      end;
     except
       on E: Exception do
       begin
