@@ -337,8 +337,8 @@ begin
   FOnGetClosest := AOnGetClosest;
 
   FSubtasks     := TList<ITask>.Create;
-  FClosestNodes := TSortedList<TNodeId, TNodeId>.Create(NodeIDSorter);
-  FQueriedNodes := TSortedList<TNodeId, INode>.Create(NodeIDSorter);
+  FClosestNodes := TSortedList<TNodeId, TNodeId>.Create(NodeIDComparer);
+  FQueriedNodes := TSortedList<TNodeId, INode>.Create(NodeIDComparer);
 end;
 
 destructor TGetPeersTask.Destroy;
@@ -464,7 +464,7 @@ begin
   inherited Create(ALocalID, AOnSendMessage);
 
   FInitialNodes := ANodes;
-  FNodes := TSortedList<TNodeId, TNodeId>.Create(NodeIDSorter);
+  FNodes := TSortedList<TNodeId, TNodeId>.Create(NodeIDComparer);
   FSubtasks := TList<ITask>.Create;
 end;
 

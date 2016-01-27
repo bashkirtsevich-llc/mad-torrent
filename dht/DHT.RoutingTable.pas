@@ -164,7 +164,7 @@ var
   distance: TNodeID;
   sortedNodes: TSortedList<TNodeID, INode>;
 begin
-  sortedNodes := TSortedList<TNodeID, INode>.Create(NodeIDSorter);
+  sortedNodes := TSortedList<TNodeID, INode>.Create(NodeIDComparer);
   try
     for b in FBuckets do
       for n in b.Nodes do

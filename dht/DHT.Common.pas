@@ -6,11 +6,11 @@ uses
   System.Generics.Defaults,
   DHT, DHT.NodeID;
 
-function NodeIDSorter: IComparer<TNodeId>;
+function NodeIDComparer: IComparer<TNodeId>;
 
 implementation
 
-function NodeIDSorter: IComparer<TNodeId>;
+function NodeIDComparer: IComparer<TNodeId>;
 begin
   Result := TDelegatedComparer<TNodeId>.Create(
     function (const Left, Right: TNodeId): Integer
