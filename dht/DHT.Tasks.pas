@@ -444,9 +444,14 @@ begin
           if response.Nodes.Len > 0 then
           begin
             // We got a list of nodes which are closer
-            for n in TNode.CloserNodes(GetInfoHash, FClosestNodes,
-              TNode.FromCompactNode(response.Nodes), TBucket.MaxCapacity) do
-              SendGetPeers(n);
+            Lock;
+            try
+              for n in TNode.CloserNodes(GetInfoHash, FClosestNodes,
+                TNode.FromCompactNode(response.Nodes), TBucket.MaxCapacity) do
+                SendGetPeers(n);
+            finally
+              Unlock;
+            end;
           end;
         end;
       end)
