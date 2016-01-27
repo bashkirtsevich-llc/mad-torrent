@@ -170,9 +170,9 @@ begin
       for n in b.Nodes do
       begin
         distance := n.ID xor ATarget;
-        if sortedNodes.Count = TBucket.MaxCapacity then
+        if (sortedNodes.Count > 0) and (sortedNodes.Count = TBucket.MaxCapacity) then
         begin
-          if distance > sortedNodes[sortedNodes.Count - 1].Key then
+          if distance > sortedNodes.Last.Key then
             Continue;
 
           sortedNodes.Delete(sortedNodes.Count - 1);
