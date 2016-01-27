@@ -19,12 +19,11 @@ type
       KeepAliveInterval = 5;
       ConnectionTimeout = 60;
   protected
-    FLock: TObject;
-    FShutdown: Boolean;
     FInfoHash: TUniString;
     FOurClientID: TUniString;
     FClientID: TUniString;
     FConnection: IConnection;
+    FDisconnecting: Boolean;
     FBitfield: TBitField;
     FExtensionSupports: TArray<TExtensionItem>;
     FConnectionEstablished: Boolean;
@@ -103,9 +102,6 @@ type
 
     procedure UpdateCounter; inline;
 
-    procedure Lock; inline;
-    procedure Unlock; inline;
-
     // messages
     procedure KeepAlive; inline;
     procedure Interested; inline;
@@ -124,7 +120,6 @@ type
     function GetHandshakeMessage: IMessage; inline;
 
     procedure Disconnect; inline;
-    procedure Shutdown; inline;
 
     procedure ConnectOutgoing; { отправка и прием хендшейка наружу }
     procedure ConnectIncoming; { прием и отправка хендшейка извне }
@@ -230,14 +225,13 @@ constructor TPeer.Create(AThreadPoolEx: TThreadPool; AConnection: IConnection;
 begin
   inherited Create;
 
-  FLock             := TObject.Create;
-  FShutdown         := False;
-
   FLastRecvSize     := 0;
   FLastSentSize     := 0;
 
   FConnection       := AConnection;
-  FConnection.OnDisconnect := DoDisconnect;
+  FConnection.OnDisconnect := DoDisconnect; //???
+
+  FDisconnecting    := False;
 
   FOurClientID      := AOurClientID;
 
@@ -264,14 +258,12 @@ begin
     FConnection.Disconnect;
 
   FSendQueue.Free;
-  FLock.Free;
   inherited;
 end;
 
 procedure TPeer.Disconnect;
 begin
-  FConnection.Disconnect;
-  FConnectionEstablished := False;
+  FDisconnecting := True;
 end;
 
 function TPeer.GetClientID: TUniString;
@@ -529,12 +521,6 @@ begin
   end;
 end;
 
-procedure TPeer.Lock;
-begin
-  _AddRef;
-  TMonitor.Enter(FLock);
-end;
-
 procedure TPeer.NotInterested;
 begin
   Enter;
@@ -596,12 +582,6 @@ begin
   finally
     Leave;
   end;
-end;
-
-procedure TPeer.Unlock;
-begin
-  TMonitor.Exit(FLock);
-  _Release;
 end;
 
 procedure TPeer.UpdateCounter;
@@ -691,17 +671,6 @@ end;
 procedure TPeer.SetOnUpdateCounter(Value: TProc<IPeer, UInt64, UInt64>);
 begin
   FOnUpdateCounter := Value;
-end;
-
-procedure TPeer.Shutdown;
-begin
-  Lock;
-  try
-    Disconnect;
-    FShutdown := True;
-  finally
-    Unlock;
-  end;
 end;
 
 procedure TPeer.DoStart(const ABitField: TBitField);
@@ -842,14 +811,13 @@ procedure TPeer.DoSync;
 begin
   Enter;
 
-  if not FShutdown then
-    FThreadPool.Exec(function : Boolean
+  FThreadPool.Exec(function : Boolean
   var
     msg: IMessage;
     i: Integer;
     t: TDateTime;
   begin
-    Lock;
+    _AddRef;
     try
       if GetConnectionConnected and GetConnectionEstablished then
       begin
@@ -894,15 +862,27 @@ begin
 
         UpdateCounter; // обновляем счетчик трафика
       end else
-      if not FShutdown then
-      case FConnection.ConnectionType of { контолируем соединение }
-        ctIncoming:
-          if GetConnectionConnected and not GetConnectionEstablished then
-            ConnectIncoming; // к нам подключились -- начинаем диалог
+      if FDisconnecting then
+      begin
+        if GetConnectionConnected then
+          FConnection.Disconnect;
 
-        ctOutgoing:
-          if not GetConnectionConnected or not GetConnectionEstablished then
-            ConnectOutgoing; // мы цепляемся
+        FConnectionEstablished := False;
+
+        DoDisconnect;
+      end else
+      begin
+        FDisconnecting := False;
+
+        case FConnection.ConnectionType of { контолируем соединение }
+          ctIncoming:
+            if GetConnectionConnected and not GetConnectionEstablished then
+              ConnectIncoming; // к нам подключились -- начинаем диалог
+
+          ctOutgoing:
+            if not GetConnectionConnected or not GetConnectionEstablished then
+              ConnectOutgoing; // мы цепляемся
+        end;
       end;
     except
       on E: Exception do
@@ -913,7 +893,7 @@ begin
     end;
 
     Leave;
-    Unlock;
+    _Release;
 
     Result := False;
   end);

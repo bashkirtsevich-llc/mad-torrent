@@ -1311,8 +1311,7 @@ begin
           {$IFDEF DEBUG}
           DebugOutput('disconnect ' + peer.Host);
           {$ENDIF}
-          peer.Shutdown;
-          RemovePeer(peer);
+          peer.Disconnect;
           Break;
         end;
       end;
