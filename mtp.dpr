@@ -29,7 +29,6 @@ uses
   DHT.Tasks in 'dht\DHT.Tasks.pas',
   DHT.Tasks.Events in 'dht\DHT.Tasks.Events.pas',
   DHT.TokenManager in 'dht\DHT.TokenManager.pas',
-  UDP.Server in 'srv\UDP.Server.pas',
   Bittorrent in 'bittorrent\Bittorrent.pas',
   Bittorrent.Bitfield in 'bittorrent\Bittorrent.Bitfield.pas',
   Bittorrent.Connection in 'bittorrent\Bittorrent.Connection.pas',
@@ -49,7 +48,9 @@ uses
   Bittorrent.Extensions in 'bittorrent\Bittorrent.Extensions.pas',
   Bittorrent.Tracker.HTTP in 'bittorrent\Bittorrent.Tracker.HTTP.pas',
   Bittorrent.Tracker.DHT in 'bittorrent\Bittorrent.Tracker.DHT.pas',
-  Bittorrent.MagnetLink in 'bittorrent\Bittorrent.MagnetLink.pas';
+  Bittorrent.MagnetLink in 'bittorrent\Bittorrent.MagnetLink.pas',
+  UDP.Server in 'udp\UDP.Server.pas',
+  UDP.Client in 'udp\UDP.Client.pas';
 
 {$R *.res}
 
