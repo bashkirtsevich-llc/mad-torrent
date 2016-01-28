@@ -12,6 +12,8 @@ type
   private
     FInputBuffer: TIdBuffer;
     FWriteBuffer: TIdBuffer;
+    function GetInputBufferIsEmpty: Boolean; inline;
+    function GetInputBufferSize: Integer; inline;
   public
     function CheckForDataOnSource(ATimeout: Integer = IdTimeoutDefault): Boolean; inline;
 
@@ -45,7 +47,8 @@ type
     procedure WriteBufferFlush(const AHost: string; const APort: TIdPort;
       const AIPVersion: TIdIPVersion = Id_IPv4); overload; inline;
 
-    function InputBufferIsEmpty: Boolean; inline;
+    property InputBufferIsEmpty: Boolean read GetInputBufferIsEmpty;
+    property InputBufferSize: Integer read GetInputBufferSize;
   public
     constructor Create(AOwner: TComponent; AReceiveTimeout: Integer = 15000 { 15 sec }); reintroduce;
     destructor Destroy; override;
@@ -65,7 +68,7 @@ begin
     FInputBuffer.Write(LBytes);
   end;
 
-  Result := not InputBufferIsEmpty;
+  Result := not GetInputBufferIsEmpty;
 end;
 
 constructor TUDPClient.Create(AOwner: TComponent; AReceiveTimeout: Integer);
@@ -87,9 +90,14 @@ begin
   inherited;
 end;
 
-function TUDPClient.InputBufferIsEmpty: Boolean;
+function TUDPClient.GetInputBufferIsEmpty: Boolean;
 begin
   Result := FInputBuffer.Size = 0;
+end;
+
+function TUDPClient.GetInputBufferSize: Integer;
+begin
+  Result := FInputBuffer.Size;
 end;
 
 function TUDPClient.ReadByte: Byte;
