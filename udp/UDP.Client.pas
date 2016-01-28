@@ -13,6 +13,8 @@ type
     FInputBuffer: TIdBuffer;
     FWriteBuffer: TIdBuffer;
   public
+    function CheckForDataOnSource(ATimeout: Integer = IdTimeoutDefault): Boolean; inline;
+
     procedure ReadBytes(var VBuffer: TIdBytes; AByteCount: Integer;
       AAppend: Boolean = True); inline;
 
@@ -24,7 +26,7 @@ type
     function ReadInt64(AConvert: Boolean = True): Int64; inline;
 
     procedure ReadUniString(AByteCount: Integer; out AData: TUniString); inline;
-  public
+
     procedure WriteBufferOpen; inline;
 
     procedure Write(const ABuffer: TIdBytes; const ALength: Integer = -1;
@@ -41,8 +43,10 @@ type
 
     procedure WriteBufferFlush(const AHost: string; const APort: TIdPort;
       const AIPVersion: TIdIPVersion = Id_IPv4);
+
+    function InputBufferIsEmpty: Boolean; inline;
   public
-    constructor Create(AOwner: TComponent); reintroduce;
+    constructor Create(AOwner: TComponent; AReceiveTimeout: Integer = 15000 { 15 sec }); reintroduce;
     destructor Destroy; override;
   end;
 
@@ -50,13 +54,28 @@ implementation
 
 { TUDPClient }
 
-constructor TUDPClient.Create(AOwner: TComponent);
+function TUDPClient.CheckForDataOnSource(ATimeout: Integer): Boolean;
+var
+  LBytes: TIdBytes;
+begin
+  if FInputBuffer.Size = 0 then
+  begin
+    ReceiveBuffer(LBytes, ATimeout);
+    FInputBuffer.Write(LBytes);
+  end;
+
+  Result := not InputBufferIsEmpty;
+end;
+
+constructor TUDPClient.Create(AOwner: TComponent; AReceiveTimeout: Integer);
 begin
   inherited Create(AOwner);
 
   TIdStack.IncUsage;
-  FWriteBuffer := TIdBuffer.Create;
-  FInputBuffer := TIdBuffer.Create;
+
+  ReceiveTimeout  := AReceiveTimeout;
+  FWriteBuffer    := TIdBuffer.Create;
+  FInputBuffer    := TIdBuffer.Create;
 end;
 
 destructor TUDPClient.Destroy;
@@ -65,6 +84,11 @@ begin
   FWriteBuffer.Free;
   TIdStack.DecUsage;
   inherited;
+end;
+
+function TUDPClient.InputBufferIsEmpty: Boolean;
+begin
+  Result := FInputBuffer.Size = 0;
 end;
 
 function TUDPClient.ReadByte: Byte;
@@ -77,14 +101,8 @@ end;
 
 procedure TUDPClient.ReadBytes(var VBuffer: TIdBytes; AByteCount: Integer;
   AAppend: Boolean);
-var
-  LBytes: TIdBytes;
 begin
-  if FInputBuffer.Size = 0 then
-  begin
-    ReceiveBuffer(LBytes);
-    FInputBuffer.Write(LBytes);
-  end else
+  if CheckForDataOnSource then
     FInputBuffer.ExtractToBytes(VBuffer, AByteCount, AAppend);
 end;
 
