@@ -49,6 +49,7 @@ uses
   Bittorrent.Tracker.HTTP in 'bittorrent\Bittorrent.Tracker.HTTP.pas',
   Bittorrent.Tracker.DHT in 'bittorrent\Bittorrent.Tracker.DHT.pas',
   Bittorrent.MagnetLink in 'bittorrent\Bittorrent.MagnetLink.pas',
+  Bittorrent.Tracker.UDP in 'bittorrent\Bittorrent.Tracker.UDP.pas',
   UDP.Server in 'udp\UDP.Server.pas',
   UDP.Client in 'udp\UDP.Client.pas';
 

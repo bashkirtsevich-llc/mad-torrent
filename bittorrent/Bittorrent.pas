@@ -444,6 +444,10 @@ type
   ['{E9883783-6856-4F22-9A4F-996AACCADB77}']
   end;
 
+  IUDPTracker = interface(IWebTracker)
+  ['{4DE9B3C4-DEA4-4CF5-B1DC-027DEEC7604E}']
+  end;
+
   IHTTPTracker = interface(IWebTracker)
   ['{9ED2EB24-5902-4BF5-BAC5-1B2D464CD1C2}']
   end;
@@ -833,6 +837,7 @@ type
 
   ETrackerException = class(EBittorrentException);
   ETrackerFailure = class(ETrackerException);
+  ETrackerNoResponse = class(ETrackerException);
 
   EServerException = class(EBittorrentException);
   EPeerSelfConnect = class(EServerException);

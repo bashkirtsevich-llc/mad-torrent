@@ -134,6 +134,7 @@
         <DCCReference Include="bittorrent\Bittorrent.Tracker.HTTP.pas"/>
         <DCCReference Include="bittorrent\Bittorrent.Tracker.DHT.pas"/>
         <DCCReference Include="bittorrent\Bittorrent.MagnetLink.pas"/>
+        <DCCReference Include="bittorrent\Bittorrent.Tracker.UDP.pas"/>
         <DCCReference Include="udp\UDP.Server.pas"/>
         <DCCReference Include="udp\UDP.Client.pas"/>
         <BuildConfiguration Include="Release">
