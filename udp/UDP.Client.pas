@@ -41,8 +41,9 @@ type
 
     procedure WriteUniString(const AValue: TUniString); inline;
 
+    procedure WriteBufferFlush; overload; inline;
     procedure WriteBufferFlush(const AHost: string; const APort: TIdPort;
-      const AIPVersion: TIdIPVersion = Id_IPv4);
+      const AIPVersion: TIdIPVersion = Id_IPv4); overload; inline;
 
     function InputBufferIsEmpty: Boolean; inline;
   public
@@ -252,6 +253,17 @@ begin
   begin
     FWriteBuffer.ExtractToBytes(LBytes);
     SendBuffer(AHost, APort, AIPVersion, LBytes);
+  end;
+end;
+
+procedure TUDPClient.WriteBufferFlush;
+var
+  LBytes: TIdBytes;
+begin
+  if FWriteBuffer.Size > 0 then
+  begin
+    FWriteBuffer.ExtractToBytes(LBytes);
+    SendBuffer(LBytes);
   end;
 end;
 
