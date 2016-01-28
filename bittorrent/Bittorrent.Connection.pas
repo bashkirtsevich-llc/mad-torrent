@@ -210,6 +210,8 @@ constructor TOutgoingConnection.Create(const AHost: string; APort: TIdPort;
 begin
   inherited Create(ctOutgoing);
 
+  TIdStack.IncUsage;
+
   FTCPClient := TIdTCPClient.Create(nil);
 
   with FTCPClient do
@@ -222,12 +224,7 @@ begin
     IPVersion := AIPVer;
     Port      := APort;
 
-    TIdStack.IncUsage;
-    try
-      Host    := GStack.ResolveHost(AHost, AIPVer); // резольфим имя хоста в IP адрес
-    finally
-      TIdStack.DecUsage;
-    end;
+    Host    := GStack.ResolveHost(AHost, AIPVer); // резольфим имя хоста в IP адрес
   end;
 end;
 
@@ -235,6 +232,7 @@ destructor TOutgoingConnection.Destroy;
 begin
   inherited;
   FTCPClient.Free;
+  TIdStack.DecUsage;
 end;
 
 procedure TOutgoingConnection.Disconnect;
