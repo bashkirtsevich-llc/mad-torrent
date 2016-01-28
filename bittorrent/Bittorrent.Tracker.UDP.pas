@@ -29,9 +29,12 @@ type
       ConnectionID: Int64 = $041727101980;
   private
     FTrackerURI: TIdURI;
+    FKey: Integer;
     FTransactionID: Integer;
     FConnected: Boolean;
     procedure GenTransactionID;
+    procedure RaiseTrackerNoResponse; inline;
+    procedure RaiseTrackerInvalidResponse; inline;
   protected
     procedure DoAnnounce; override; final;
     procedure DoRetrack; override; final;
@@ -62,6 +65,7 @@ begin
 
   FTrackerURI := TIdURI.Create(ATrackerURL);
   FConnected  := False;
+  FKey        := Random(Integer.MaxValue);
 end;
 
 destructor TUDPTracker.Destroy;
@@ -89,23 +93,57 @@ begin
           WriteBufferOpen;
 
           Write(ConnectionID);
-          Write(TUDPTrackerAction.taConnect.AsInteger);
+          Write(taConnect.AsInteger);
           Write(FTransactionID);
 
           WriteBufferFlush;
 
           if CheckForDataOnSource then
           begin
-            if (ReadInt32 <> TUDPTrackerAction.taConnect.AsInteger) or
-               (ReadInt32 <> FTransactionID) or
-               (ReadInt64 <> ConnectionID) then
-              raise ETrackerFailure.Create('UDP tracker invalid response');
+            FConnected := (ReadInt32 = taConnect.AsInteger) and
+                          (ReadInt32 = FTransactionID) and
+                          (ReadInt64 = ConnectionID);
+
+            if not FConnected then
+              RaiseTrackerInvalidResponse;
           end else
-            raise ETrackerNoResponse.Create('UDP tracker has no response');
+            RaiseTrackerNoResponse;
         end;
       end;
 
       { Announce }
+
+      with udp do
+      begin
+        WriteBufferOpen;
+
+        Write(ConnectionID);
+        Write(taAnnounce.AsInteger);
+        Write(FTransactionID);
+        WriteUniString(FInfoHash);
+        //WriteUniString(FPeerID);
+        Write(FBytesDownloaded);
+        Write(FBytesLeft);
+        Write(FBytesUploaded);
+        Write(Integer(0)); // event
+        Write(Integer(0)); // ip-address
+        Write(FKey); // key
+        Write(Integer(-1)); // num_want
+        Write(FAnnouncePort);
+
+        WriteBufferFlush;
+
+        if CheckForDataOnSource then
+        begin
+          if (InputBufferSize < 20) or
+             (ReadInt32 <> taAnnounce.AsInteger) or
+             (ReadInt32 <> FTransactionID) then
+            RaiseTrackerInvalidResponse;
+
+
+        end else
+          RaiseTrackerNoResponse;
+      end;
 
     finally
       udp.Free;
@@ -128,6 +166,16 @@ begin
   repeat
     FTransactionID := Random(Integer.MaxValue);
   until (FTransactionID = oldTID);
+end;
+
+procedure TUDPTracker.RaiseTrackerInvalidResponse;
+begin
+  raise ETrackerFailure.Create('UDP tracker invalid response');
+end;
+
+procedure TUDPTracker.RaiseTrackerNoResponse;
+begin
+  raise ETrackerNoResponse.Create('UDP tracker has no response');
 end;
 
 end.
