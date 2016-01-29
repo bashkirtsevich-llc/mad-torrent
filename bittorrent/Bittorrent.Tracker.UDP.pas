@@ -30,6 +30,7 @@ type
   private
     FTrackerURI: TIdURI;
     FKey: Integer;
+    FPeerID: TUniString;
     FTransactionID: Integer;
     FConnected: Boolean;
     FLeechers: Integer;
@@ -43,7 +44,7 @@ type
   public
     constructor Create(AThreadPool: TThreadPool; const AInfoHash: TUniString;
       AAnnouncePort: TIdPort; AAnnounceInterval, ARetrackInterval: Integer;
-      ATrackerURL: string); reintroduce;
+      ATrackerURL: string; const APeerID: TUniString); reintroduce;
     destructor Destroy; override;
   end;
 
@@ -60,12 +61,15 @@ end;
 
 constructor TUDPTracker.Create(AThreadPool: TThreadPool;
   const AInfoHash: TUniString; AAnnouncePort: TIdPort; AAnnounceInterval,
-  ARetrackInterval: Integer; ATrackerURL: string);
+  ARetrackInterval: Integer; ATrackerURL: string; const APeerID: TUniString);
 begin
   inherited Create(AThreadPool, AInfoHash, AAnnouncePort, AAnnounceInterval,
     ARetrackInterval, ATrackerURL);
 
   FTrackerURI := TIdURI.Create(ATrackerURL);
+  Assert(not FTrackerURI.Port.IsEmpty);
+
+  FPeerID.Assign(APeerID);
   FConnected  := False;
   FKey        := Random(Integer.MaxValue);
 end;
