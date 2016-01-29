@@ -800,6 +800,7 @@ type
     procedure RegisterSeeding(ASeeding: ISeeding);
 
     procedure BindSeedingDHT(ASeeding: ISeeding); inline;
+    procedure AddSeedingTrackers(ASeeding: ISeeding; ATrackers: TEnumerable<string>);
 
     function NormalizePath(const APath: string): string;
 
@@ -855,7 +856,7 @@ implementation
 uses
   Bittorrent.Server, Bittorrent.Seeding, Bittorrent.MetaFile, Bittorrent.Messages,
   Bittorrent.Peer, Bittorrent.Connection, Bittorrent.Counter, Bittorrent.MagnetLink,
-  Bittorrent.Tracker.DHT,
+  Bittorrent.Tracker.DHT, Bittorrent.Tracker.HTTP, Bittorrent.Tracker.UDP,
   DHT.Engine;
 
 { TMessageIDHelper }
@@ -907,6 +908,7 @@ begin
   Lock;
   try
     with AMagnetLink do
+    begin
       if not FSeedings.TryGetValue(InfoHash, Result) then
       begin
         Result := TSeeding.Create(
@@ -916,6 +918,10 @@ begin
 
         RegisterSeeding(Result);
       end;
+
+      { заполнение списка трекеров }
+      AddSeedingTrackers(Result, Trackers);
+    end;
   finally
     Unlock;
   end;
@@ -955,6 +961,23 @@ begin
   end;
 end;
 
+procedure TBittorrent.AddSeedingTrackers(ASeeding: ISeeding;
+  ATrackers: TEnumerable<string>);
+var
+  tr: string;
+begin
+  for tr in ATrackers do
+  begin
+    if tr.Contains('http://') then
+      ASeeding.AddTracker(THTTPTracker.Create(FThreads, ASeeding.InfoHash,
+        FListenPort, 60, 60, tr, FClientID))
+    else
+    if tr.Contains('udp://') then
+      ASeeding.AddTracker(TUDPTracker.Create(FThreads, ASeeding.InfoHash,
+        FListenPort, 60, 60, tr, FClientID))
+  end;
+end;
+
 procedure TBittorrent.AddToBlackList(AHost: string);
 begin
   Lock;
@@ -986,6 +1009,9 @@ begin
 
       RegisterSeeding(Result);
     end;
+
+    { заполнение списка трекеров }
+    AddSeedingTrackers(Result, AMetaFile.Trackers);
   finally
     Unlock;
   end;
