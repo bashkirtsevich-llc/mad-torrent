@@ -80,8 +80,7 @@ begin
         Assert(Supports(infoDict[AnnounceKey], IBencodedString));
 
         with infoDict[AnnounceKey] as IBencodedString do
-          if string(Value).Contains('http://') then // временный фильтр, пропускающий только HTTP трекеры
-            FTrackers.Add(string(Value));
+          FTrackers.Add(string(Value));
       end;
 
       if infoDict.ContainsKey(AnnounceListKey) then
@@ -101,7 +100,7 @@ begin
                 Assert(Supports(AItem2, IBencodedString));
 
                 with AItem2 as IBencodedString do
-                  if string(Value).Contains('http://') and not FTrackers.Contains(string(Value)) then
+                  if not FTrackers.Contains(string(Value)) then
                     FTrackers.Add(string(Value));
               end);
           end);
