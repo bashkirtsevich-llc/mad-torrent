@@ -433,15 +433,15 @@ type
     property BytesCorrupt: Int64 read GetBytesCorrupt write SetBytesCorrupt;
   end;
 
+  IDHTTracker = interface(ITracker)
+  ['{E9883783-6856-4F22-9A4F-996AACCADB77}']
+  end;
+
   IWebTracker = interface(IStatTracker)
   ['{4E288897-308A-4ED0-A210-49B958A5E969}']
     function GetTrackerURL: string;
 
     property TrackerURL: string read GetTrackerURL;
-  end;
-
-  IDHTTracker = interface(ITracker)
-  ['{E9883783-6856-4F22-9A4F-996AACCADB77}']
   end;
 
   IUDPTracker = interface(IWebTracker)
