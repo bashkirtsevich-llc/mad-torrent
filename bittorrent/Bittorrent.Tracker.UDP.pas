@@ -8,7 +8,7 @@ uses
   Common.ThreadPool,
   Bittorrent, Bittorrent.Tracker,
   UDP.Client,
-  IdGlobal, IdStack, IdUDPClient, IdBuffer, IdURI;
+  IdGlobal, IdStack, IdUDPClient, IdBuffer, IdURI, IdIPAddress;
 
 type
   TUDPTrackerAction = (taConnect, taAnnounce, taScrape);
@@ -32,6 +32,8 @@ type
     FKey: Integer;
     FTransactionID: Integer;
     FConnected: Boolean;
+    FLeechers: Integer;
+    FSeeders: Integer;
     procedure GenTransactionID;
     procedure RaiseTrackerNoResponse; inline;
     procedure RaiseTrackerInvalidResponse; inline;
@@ -77,6 +79,7 @@ end;
 procedure TUDPTracker.DoAnnounce;
 var
   udp: TUDPClient;
+  peerPort: TIdPort;
 begin
   try
     udp := TUDPClient.Create(nil);
@@ -98,16 +101,15 @@ begin
 
           WriteBufferFlush;
 
-          if CheckForDataOnSource then
-          begin
+          if not CheckForDataOnSource then
+            RaiseTrackerNoResponse
+          else
             FConnected := (ReadInt32 = taConnect.AsInteger) and
                           (ReadInt32 = FTransactionID) and
                           (ReadInt64 = ConnectionID);
 
-            if not FConnected then
-              RaiseTrackerInvalidResponse;
-          end else
-            RaiseTrackerNoResponse;
+          if not FConnected then
+            RaiseTrackerInvalidResponse;
         end;
       end;
 
@@ -121,28 +123,47 @@ begin
         Write(taAnnounce.AsInteger);
         Write(FTransactionID);
         WriteUniString(FInfoHash);
-        //WriteUniString(FPeerID);
+        WriteUniString('12345123451234512345'); //WriteUniString(FPeerID);
         Write(FBytesDownloaded);
         Write(FBytesLeft);
         Write(FBytesUploaded);
-        Write(Integer(0)); // event
-        Write(Integer(0)); // ip-address
-        Write(FKey); // key
+        Write(Integer(0));  // event
+        Write(Integer(0));  // ip-address
+        Write(FKey);        // key
         Write(Integer(-1)); // num_want
         Write(FAnnouncePort);
 
         WriteBufferFlush;
 
-        if CheckForDataOnSource then
+        if not CheckForDataOnSource then
+          RaiseTrackerNoResponse
+        else
+        if (InputBufferSize < 20) or
+           (ReadInt32 <> taAnnounce.AsInteger) or
+           (ReadInt32 <> FTransactionID) then
+          RaiseTrackerInvalidResponse
+        else
         begin
-          if (InputBufferSize < 20) or
-             (ReadInt32 <> taAnnounce.AsInteger) or
-             (ReadInt32 <> FTransactionID) then
-            RaiseTrackerInvalidResponse;
+          { announce response }
+          FAnnounceInterval := ReadInt32;
 
+          FLeechers := ReadInt32;
+          FSeeders  := ReadInt32;
 
-        end else
-          RaiseTrackerNoResponse;
+          { peers }
+          while not InputBufferIsEmpty and (InputBufferSize mod 6 = 0) do
+          begin
+            with TIdIPAddress.Create do
+            try
+              IPv4      := ReadUInt32;
+              peerPort  := ReadUInt16;
+
+              ResponsePeerInfo(IPv4AsString, peerPort);
+            finally
+              Free;
+            end;
+          end;
+        end;
       end;
 
     finally
