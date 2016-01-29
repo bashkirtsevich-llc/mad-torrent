@@ -565,10 +565,6 @@ begin
     FMetafile := AMetafile;
     FMetadataSize := AMetafile.Metadata.Len;
 
-    // трекеры надо отдельным параметром передавать
-    {for s in AMetafile.Trackers do
-      FTrackers.Add(CreateTracker(s, FListenPort));}
-
     for it in AMetafile.Files do
       FItems.Add(TSeedingItem.Create(FDownloadPath, it, AMetafile.PiecesLength,
         OnGetBitField, OnGetState, OnRequire));
