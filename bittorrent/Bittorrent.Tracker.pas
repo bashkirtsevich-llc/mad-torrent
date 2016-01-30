@@ -99,6 +99,8 @@ begin
     if SecondsBetween(Now, FLastRetrack) >= FRetrackInterval then
       DoRetrack;
 
+    Sleep(100); // дабы не создавать излишнюю нагрузку на проц
+
     Leave;
 
     Result := False;
