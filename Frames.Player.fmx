@@ -237,6 +237,21 @@ object frmPlayer: TfrmPlayer
     Left = 800
     Top = 416
   end
+  object lstFiles: TListBox
+    Align = Client
+    Size.Width = 1065.000000000000000000
+    Size.Height = 559.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 3
+    Visible = False
+    OnDblClick = lstFilesDblClick
+    DisableFocusEffect = True
+    DefaultItemStyles.ItemStyle = ''
+    DefaultItemStyles.GroupHeaderStyle = ''
+    DefaultItemStyles.GroupFooterStyle = ''
+    Viewport.Width = 1061.000000000000000000
+    Viewport.Height = 555.000000000000000000
+  end
   object actlstFullScreen: TActionList
     Left = 72
     Top = 208

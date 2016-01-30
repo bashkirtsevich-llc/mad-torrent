@@ -5,18 +5,19 @@ interface
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
   System.SyncObjs, System.TimeSpan, System.Rtti, System.Math,
-  
+
   Winapi.Windows,
-  
+
   FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.StdCtrls,
   FMX.Objects, FMX.Layouts, FMX.Surfaces, System.Actions,
-  
+
   PasLibVlcUnit,
   VLC.Player,
 
+  Common.Prelude,
   Bittorrent,
 
-  Frames.Overlay, FMX.ActnList, FMX.Controls.Presentation;
+  Frames.Overlay, FMX.ActnList, FMX.Controls.Presentation, FMX.ListBox;
 
 type
   TfrmPlayer = class(TFrame)
@@ -44,6 +45,7 @@ type
 	labelFileName       : TLabel;
     actlstFullScreen    : TActionList;
     actFullScreen       : TAction;
+    lstFiles: TListBox;
 
     procedure btnPlayClick(Sender: TObject);
     procedure btnFullScreenClick(Sender: TObject);
@@ -65,7 +67,8 @@ type
     procedure trckbrPlayingStateThumbMouseUp(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Single);
     procedure tmrCursorTimer(Sender: TObject);
-	procedure actFullScreenExecute(Sender: TObject);	
+	procedure actFullScreenExecute(Sender: TObject);
+    procedure lstFilesDblClick(Sender: TObject);
   private
     const
       BuffSize: Integer = 10*1024*1024; { 10Мб буфер }
@@ -156,8 +159,8 @@ end;
 
 procedure TfrmPlayer.SetFileItem(const Value: ISeedingItem);
 begin
-  TThread.CreateAnonymousThread(procedure
-  begin
+//  TThread.CreateAnonymousThread(procedure
+//  begin
     Lock;
     try
       Sleep(100);
@@ -196,7 +199,7 @@ begin
     finally
       Unlock;
     end;
-  end).Start;
+//  end).Start;
 end;
 
 (*
@@ -215,6 +218,33 @@ end;
 procedure TfrmPlayer.Lock;
 begin
   TMonitor.Enter(FLock);
+end;
+
+procedure TfrmPlayer.lstFilesDblClick(Sender: TObject);
+var
+  lst: TArray<ISeedingItem>;
+  it: ISeedingItem;
+  s: string;
+begin
+  if (lstFiles.ItemIndex <> -1) and Assigned(FSeeding) then
+  begin
+    s := lstFiles.Items[lstFiles.ItemIndex];
+
+    Lock;
+    try
+      lst := FSeeding.Items.ToArray;
+
+      for it in lst do
+        if it.Path.Contains(s) then
+        begin
+          SetFileItem(it);
+          lstFiles.Visible := False;
+          Break;
+        end;
+    finally
+      Unlock;
+    end;
+  end;
 end;
 
 procedure TfrmPlayer.OnPlayerClose(APlayer: TVLCPlayer);
@@ -584,52 +614,61 @@ begin
 end;
 
 procedure TfrmPlayer.SetSeeding(const Value: ISeeding);
+var
+  fillList: TProc;
 begin
-  if ssHaveMetadata in Value.State then
-    frmOverlay.Overlay := otLoading
-  else
-  begin
+  Lock;
+  try
+    Sleep(100);
 
-  end;
+    FPlayer.Pause;
+    FFileItem := nil;
+    FPlayer.Stop(True);
 
-  Value.OnUpdate := procedure (ASeeding: ISeeding)
-  var
-    s: Single;
-  begin
-    s := ASeeding.PercentComplete;
+    FSeeding := Value;
 
-    TThread.Synchronize(nil, procedure
+    fillList := procedure
     begin
-      pbLoadingState.Value := s;
-    end);
-  end;
+      TPrelude.Foreach<IFileItem>(FSeeding.Metafile.Files.ToArray,
+        procedure (AItem: IFileItem)
+        begin
+          lstFiles.Items.Add(Format('%s', [AItem.FilePath{, AItem.FileSize}]));
+        end
+      );
 
-  Value.OnMetadataLoaded := procedure (ASeeding: ISeeding; AMetaFile: IMetaFile)
-  begin
-    TThread.Synchronize(nil, procedure
-    begin
-      frmOverlay.Overlay := otNone;
-
-      { показать список файлов }
-    end);
-  end;
-
-
-  TThread.CreateAnonymousThread(procedure
-  begin
-    Lock;
-    try
-      Sleep(100);
-
-      FPlayer.Pause;
-      FFileItem := nil;
-      FPlayer.Stop(True);
-
-      FSeeding := Value;
-    finally
-      Unlock;
+      lstFiles.Visible := True;
     end;
-  end).Start;
+
+    if not (ssHaveMetadata in FSeeding.State) then
+      frmOverlay.Overlay := otLoading
+    else
+      fillList;
+
+    FSeeding.OnUpdate := procedure (ASeeding: ISeeding)
+    var
+      s: Single;
+    begin
+      s := ASeeding.PercentComplete;
+
+      TThread.Synchronize(nil, procedure
+      begin
+        pbLoadingState.Value := s;
+      end);
+    end;
+
+    FSeeding.OnMetadataLoaded := procedure (ASeeding: ISeeding; AMetaFile: IMetaFile)
+    begin
+      TThread.Synchronize(nil, procedure
+      begin
+        frmOverlay.Overlay := otNone;
+
+        { показать список файлов }
+        fillList;
+      end);
+    end;
+  finally
+    Unlock;
+  end;
 end;
 
 function TfrmPlayer.TimeToString(ATime: Int64): string;
