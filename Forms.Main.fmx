@@ -2,38 +2,105 @@ object frmMain: TfrmMain
   Left = 0
   Top = 0
   Caption = 'Form1'
-  ClientHeight = 177
-  ClientWidth = 667
+  ClientHeight = 433
+  ClientWidth = 833
   FormFactor.Width = 320
   FormFactor.Height = 480
   FormFactor.Devices = [Desktop]
   OnCreate = FormCreate
   DesignerMasterStyle = 0
-  object btn1: TButton
-    Position.X = 8.000000000000000000
-    Position.Y = 32.000000000000000000
+  object tbcPages: TTabControl
+    Align = Client
+    Size.Width = 833.000000000000000000
+    Size.Height = 433.000000000000000000
+    Size.PlatformDefault = False
+    TabIndex = 0
     TabOrder = 0
-    Text = 'Download'
-    OnClick = btn1Click
-  end
-  object edtMagnet: TEdit
-    Touch.InteractiveGestures = [LongTap, DoubleTap]
-    Anchors = [akLeft, akTop, akRight]
-    TabOrder = 1
-    Text = 'magnet:?xt=urn:btih:3A30AE62DE60F6B22A8667D613B9754F26A305CD'
-    Position.X = 8.000000000000000000
-    Position.Y = 8.000000000000000000
-    Size.Width = 651.000000000000000000
-    Size.Height = 22.000000000000000000
-    Size.PlatformDefault = False
-  end
-  object pbComplete: TProgressBar
-    Anchors = [akLeft, akTop, akRight]
-    Orientation = Horizontal
-    Position.X = 96.000000000000000000
-    Position.Y = 32.000000000000000000
-    Size.Width = 563.000000000000000000
-    Size.Height = 20.000000000000000000
-    Size.PlatformDefault = False
+    TabPosition = PlatformDefault
+    object tbtmAdd: TTabItem
+      CustomIcon = <
+        item
+        end>
+      IsSelected = True
+      Size.Width = 67.000000000000000000
+      Size.Height = 24.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 0
+      Text = 'tbtmAdd'
+      object edtMagnet: TEdit
+        Touch.InteractiveGestures = [LongTap, DoubleTap]
+        Anchors = [akLeft, akTop, akRight]
+        TabOrder = 0
+        Position.X = 184.000000000000000000
+        Position.Y = 272.000000000000000000
+        Size.Width = 489.000000000000000000
+        Size.Height = 22.000000000000000000
+        Size.PlatformDefault = False
+        object btnAddMagnet: TButton
+          Align = Right
+          Position.X = 416.000000000000000000
+          Size.Width = 73.000000000000000000
+          Size.Height = 22.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 0
+          Text = #1044#1086#1073#1072#1074#1080#1090#1100
+          OnClick = btnAddMagnetClick
+        end
+      end
+    end
+    object tbtmPlayer: TTabItem
+      CustomIcon = <
+        item
+        end>
+      IsSelected = False
+      Size.Width = 78.000000000000000000
+      Size.Height = 24.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 0
+      Text = 'tbtmPlayer'
+      inline frmPlayer: TfrmPlayer
+        Align = Client
+        Locked = True
+        Size.Width = 833.000000000000000000
+        Size.Height = 409.000000000000000000
+        Size.PlatformDefault = False
+        inherited rectangleScreen: TRectangle
+          Size.Width = 833.000000000000000000
+          Size.Height = 409.000000000000000000
+          inherited imageVideo: TImage
+            Size.Width = 833.000000000000000000
+            Size.Height = 409.000000000000000000
+            inherited pnlPlayerToolKit: TPanel
+              Position.Y = 369.000000000000000000
+              Size.Width = 833.000000000000000000
+              inherited layoutVolumeBar: TLayout
+                Position.X = 705.000000000000000000
+              end
+              inherited layoutState: TLayout
+                Size.Width = 497.000000000000000000
+                inherited pbLoadingState: TProgressBar
+                  Size.Width = 497.000000000000000000
+                end
+                inherited trckbrPlayingState: TTrackBar
+                  Size.Width = 497.000000000000000000
+                end
+              end
+              inherited layoutFullScreen: TLayout
+                Position.X = 799.000000000000000000
+              end
+              inherited layoutVolume: TLayout
+                Position.X = 678.000000000000000000
+              end
+              inherited layoutTime: TLayout
+                Position.X = 549.000000000000000000
+              end
+            end
+            inherited labelFileName: TLabel
+              Size.Width = 833.000000000000000000
+            end
+          end
+        end
+      end
+    end
   end
 end

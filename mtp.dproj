@@ -137,8 +137,14 @@
         <DCCReference Include="bittorrent\Bittorrent.Tracker.UDP.pas"/>
         <DCCReference Include="udp\UDP.Server.pas"/>
         <DCCReference Include="udp\UDP.Client.pas"/>
-        <DCCReference Include="Frames.Overlay.pas"/>
-        <DCCReference Include="Frames.Player.pas"/>
+        <DCCReference Include="Frames.Overlay.pas">
+            <Form>frmOverlay</Form>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
+        <DCCReference Include="Frames.Player.pas">
+            <Form>frmPlayer</Form>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
         <DCCReference Include="vlc\VLC.Player.pas"/>
         <DCCReference Include="vlc\PasLibVlcUnit.pas"/>
         <BuildConfiguration Include="Release">

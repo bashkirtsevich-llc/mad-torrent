@@ -52,8 +52,8 @@ uses
   Bittorrent.Tracker.UDP in 'bittorrent\Bittorrent.Tracker.UDP.pas',
   UDP.Server in 'udp\UDP.Server.pas',
   UDP.Client in 'udp\UDP.Client.pas',
-  Frames.Overlay in 'Frames.Overlay.pas',
-  Frames.Player in 'Frames.Player.pas',
+  Frames.Overlay in 'Frames.Overlay.pas' {frmOverlay: TFrame},
+  Frames.Player in 'Frames.Player.pas' {frmPlayer: TFrame},
   VLC.Player in 'vlc\VLC.Player.pas',
   PasLibVlcUnit in 'vlc\PasLibVlcUnit.pas';
 

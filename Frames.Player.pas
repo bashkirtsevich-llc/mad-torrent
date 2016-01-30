@@ -77,6 +77,7 @@ type
     FFileItem   : ISeedingItem;
     FPlaying    : Boolean;
     FMouseDroped: Boolean;
+    FSeeding: ISeeding;
 
     procedure Lock; inline;
     procedure Unlock; inline;
@@ -98,8 +99,10 @@ type
     procedure OnPlayerPlaying(APlayer: TVLCPlayer);
     procedure OnPlayerPaused(APlayer: TVLCPlayer);
     procedure OnPlayerEndReached(APlayer: TVLCPlayer);
+    procedure SetSeeding(const Value: ISeeding);
   public
     property FileItem: ISeedingItem read FFileItem write SetFileItem;
+    property Seeding: ISeeding read FSeeding write SetSeeding;
     procedure PausePlayer;
   public
     constructor Create(AOwner: TComponent); override;
@@ -578,6 +581,55 @@ begin
       end;
     end
   );
+end;
+
+procedure TfrmPlayer.SetSeeding(const Value: ISeeding);
+begin
+  if ssHaveMetadata in Value.State then
+    frmOverlay.Overlay := otLoading
+  else
+  begin
+
+  end;
+
+  Value.OnUpdate := procedure (ASeeding: ISeeding)
+  var
+    s: Single;
+  begin
+    s := ASeeding.PercentComplete;
+
+    TThread.Synchronize(nil, procedure
+    begin
+      pbLoadingState.Value := s;
+    end);
+  end;
+
+  Value.OnMetadataLoaded := procedure (ASeeding: ISeeding; AMetaFile: IMetaFile)
+  begin
+    TThread.Synchronize(nil, procedure
+    begin
+      frmOverlay.Overlay := otNone;
+
+      { показать список файлов }
+    end);
+  end;
+
+
+  TThread.CreateAnonymousThread(procedure
+  begin
+    Lock;
+    try
+      Sleep(100);
+
+      FPlayer.Pause;
+      FFileItem := nil;
+      FPlayer.Stop(True);
+
+      FSeeding := Value;
+    finally
+      Unlock;
+    end;
+  end).Start;
 end;
 
 function TfrmPlayer.TimeToString(ATime: Int64): string;

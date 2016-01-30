@@ -9,15 +9,21 @@ uses
   FMX.Controls.Presentation, FMX.StdCtrls,
   Basic.UniString,
   Common.SHA1,
-  Bittorrent, Bittorrent.MetaFile, Bittorrent.MagnetLink, FMX.Edit;
+  Bittorrent, Bittorrent.MetaFile, Bittorrent.MagnetLink, FMX.Edit,
+  FMX.TabControl, FMX.ExtCtrls, FMX.ListView.Types, FMX.ListView, FMX.Layouts,
+  FMX.ListBox, Frames.Overlay, Frames.Player;
 
 type
   TfrmMain = class(TForm)
-    btn1: TButton;
+    tbcPages: TTabControl;
+    tbtmAdd: TTabItem;
+    tbtmPlayer: TTabItem;
     edtMagnet: TEdit;
-    pbComplete: TProgressBar;
+    btnAddMagnet: TButton;
+    frmPlayer: TfrmPlayer;
     procedure FormCreate(Sender: TObject);
-    procedure btn1Click(Sender: TObject);
+    procedure btnAddMagnetClick(Sender: TObject);
+    procedure lstFilesDblClick(Sender: TObject);
   private
     bt: IBittorrent;
   public
@@ -30,49 +36,23 @@ implementation
 
 {$R *.fmx}
 
-procedure TfrmMain.btn1Click(Sender: TObject);
+procedure TfrmMain.btnAddMagnetClick(Sender: TObject);
 begin
-  //magnet:?xt=urn:btih:b3a069319e7b1decd26cdcd3b7c1c1fb0a38b21d
-  //magnet:?xt=urn:btih:F9B40E91088D78F922989C9458AAE8495AA4ADC5
-  //magnet:?xt=urn:btih:520A9A81C1F854271002CE80CF6A24D105FE5699
-  //magnet:?xt=urn:btih:501ec472144d20a4461c08f3305d138db6f3a534
-  //magnet:?xt=urn:btih:afa82991982331cb7d0dd03b6994f7718dac696b
-  //magnet:?xt=urn:btih:35b547155afd164679dededd08ff57f25e4f3092
-  //magnet:?xt=urn:btih:3A30AE62DE60F6B22A8667D613B9754F26A305CD
-  with bt.AddTorrent(TMagnetLink.Create(edtMagnet.Text), 'c:\downloads') do
-  begin
-    OnUpdate := procedure (ASeeding: ISeeding)
-    var
-      s: Single;
-    begin
-      s := ASeeding.PercentComplete;
+  frmPlayer.Seeding := bt.AddTorrent(TMagnetLink.Create(edtMagnet.Text), 'e:\downloads');
 
-      TThread.Synchronize(nil, procedure
-      begin
-        pbComplete.Value := s;
-      end);
-    end;
-
-    OnMetadataLoaded := procedure (ASeeding: ISeeding; AMetaFile: IMetaFile)
-    var
-      fs: TFileStream;
-      md: TUniString;
-    begin
-      fs := TFileStream.Create(AMetaFile.InfoHash.ToHexString + '.torrent', fmCreate);
-      try
-        md := AMetaFile.Metadata;
-        fs.Write(md.DataPtr[0]^, md.Len);
-      finally
-        fs.Free;
-      end;
-    end;
-  end;
+  { переброс на страницу плеера }
+  tbtmPlayer.IsSelected := True;
 end;
 
 procedure TfrmMain.FormCreate(Sender: TObject);
 begin
   bt := TBittorrent.Create('MT-12345678912345678', 12346, 12346);
   bt.Start;
+end;
+
+procedure TfrmMain.lstFilesDblClick(Sender: TObject);
+begin
+//
 end;
 
 end.
