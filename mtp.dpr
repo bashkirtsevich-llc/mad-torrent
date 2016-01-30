@@ -51,7 +51,11 @@ uses
   Bittorrent.MagnetLink in 'bittorrent\Bittorrent.MagnetLink.pas',
   Bittorrent.Tracker.UDP in 'bittorrent\Bittorrent.Tracker.UDP.pas',
   UDP.Server in 'udp\UDP.Server.pas',
-  UDP.Client in 'udp\UDP.Client.pas';
+  UDP.Client in 'udp\UDP.Client.pas',
+  Frames.Overlay in 'Frames.Overlay.pas',
+  Frames.Player in 'Frames.Player.pas',
+  VLC.Player in 'vlc\VLC.Player.pas',
+  PasLibVlcUnit in 'vlc\PasLibVlcUnit.pas';
 
 {$R *.res}
 

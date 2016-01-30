@@ -1,0 +1,247 @@
+object frmPlayer: TfrmPlayer
+  Locked = True
+  Size.Width = 1065.000000000000000000
+  Size.Height = 559.000000000000000000
+  Size.PlatformDefault = False
+  object rectangleScreen: TRectangle
+    Align = Client
+    Fill.Color = claBlack
+    Sides = []
+    Size.Width = 1065.000000000000000000
+    Size.Height = 559.000000000000000000
+    Size.PlatformDefault = False
+    Stroke.Kind = None
+    OnClick = btnPlayClick
+    OnDblClick = btnFullScreenClick
+    object imageVideo: TImage
+      MultiResBitmap = <
+        item
+        end>
+      Align = Client
+      HitTest = False
+      Size.Width = 1065.000000000000000000
+      Size.Height = 559.000000000000000000
+      Size.PlatformDefault = False
+      object pnlState: TPanel
+        Align = Center
+        HitTest = False
+        Opacity = 0.000000000000000000
+        Size.Width = 100.000000000000000000
+        Size.Height = 100.000000000000000000
+        Size.PlatformDefault = False
+        StyleLookup = 'shareman_panelState'
+        TabOrder = 0
+      end
+      object pnlPlayerToolKit: TPanel
+        Align = Bottom
+        Position.Y = 519.000000000000000000
+        Size.Width = 1065.000000000000000000
+        Size.Height = 40.000000000000000000
+        Size.PlatformDefault = False
+        StyleLookup = 'shareman_panelplayertoolkit'
+        TabOrder = 1
+        object layoutVolumeBar: TLayout
+          Align = Right
+          Margins.Top = 16.000000000000000000
+          Margins.Right = 12.000000000000000000
+          Margins.Bottom = 16.000000000000000000
+          Position.X = 937.000000000000000000
+          Position.Y = 16.000000000000000000
+          Size.Width = 70.000000000000000000
+          Size.Height = 8.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 3
+          object trckbrVolume: TTrackBar
+            Align = VertCenter
+            Cursor = crHandPoint
+            Orientation = Horizontal
+            Size.Width = 70.000000000000000000
+            Size.Height = 8.000000000000000000
+            Size.PlatformDefault = False
+            StyleLookup = 'shareman_trackbar'
+            TabOrder = 0
+            Value = 100.000000000000000000
+            OnApplyStyleLookup = FillTrackBar
+            OnChange = trckbrVolumeChange
+            OnKeyUp = trckbrVolumeKeyUp
+            OnClick = trckbrVolumeClick
+          end
+        end
+        object layoutPlay: TLayout
+          Align = MostLeft
+          Margins.Left = 12.000000000000000000
+          Margins.Right = 12.000000000000000000
+          Position.X = 12.000000000000000000
+          Size.Width = 16.000000000000000000
+          Size.Height = 40.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 4
+          object btnPlay: TButton
+            Align = Center
+            Cursor = crHandPoint
+            Size.Width = 16.000000000000000000
+            Size.Height = 16.000000000000000000
+            Size.PlatformDefault = False
+            StyleLookup = 'shareman_buttonPlay'
+            TabOrder = 0
+            Text = 'btnPlay'
+            OnClick = btnPlayClick
+          end
+        end
+        object layoutState: TLayout
+          Align = Client
+          Margins.Top = 16.000000000000000000
+          Margins.Bottom = 16.000000000000000000
+          Size.Width = 729.000000000000000000
+          Size.Height = 8.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 5
+          object pbLoadingState: TProgressBar
+            Align = VertCenter
+            HitTest = False
+            Orientation = Horizontal
+            Position.Y = 2.000000000000000000
+            Size.Width = 729.000000000000000000
+            Size.Height = 4.000000000000000000
+            Size.PlatformDefault = False
+            StyleLookup = 'shareman_progressbar'
+          end
+          object trckbrPlayingState: TTrackBar
+            Align = VertCenter
+            ClipParent = True
+            Cursor = crHandPoint
+            Max = 1.000000000000000000
+            Orientation = Horizontal
+            Size.Width = 729.000000000000000000
+            Size.Height = 8.000000000000000000
+            Size.PlatformDefault = False
+            StyleLookup = 'shareman_trackbar'
+            TabOrder = 0
+            OnApplyStyleLookup = trckbrPlayingStateApplyStyleLookup
+            OnChange = trackBarPlayingChange
+            OnMouseDown = trckbrPlayingStateMouseDown
+            OnMouseUp = trckbrPlayingStateMouseUp
+            OnResize = FillTrackBar
+          end
+        end
+        object layoutFullScreen: TLayout
+          Align = MostRight
+          Margins.Left = 12.000000000000000000
+          Margins.Right = 12.000000000000000000
+          Position.X = 1031.000000000000000000
+          Size.Width = 22.000000000000000000
+          Size.Height = 40.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 6
+          object btnFullScreen: TButton
+            Align = Center
+            Cursor = crHandPoint
+            Margins.Left = 12.000000000000000000
+            Margins.Right = 12.000000000000000000
+            Size.Width = 22.000000000000000000
+            Size.Height = 16.000000000000000000
+            Size.PlatformDefault = False
+            StyleLookup = 'shareman_buttonFullScreen'
+            TabOrder = 0
+            Text = 'btnPlay'
+            OnClick = btnFullScreenClick
+          end
+        end
+        object layoutVolume: TLayout
+          Align = Right
+          Margins.Left = 12.000000000000000000
+          Margins.Right = 5.000000000000000000
+          Position.X = 910.000000000000000000
+          Size.Width = 22.000000000000000000
+          Size.Height = 40.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 7
+          object btnVolume: TButton
+            Align = Center
+            Cursor = crHandPoint
+            Size.Width = 22.000000000000000000
+            Size.Height = 16.000000000000000000
+            Size.PlatformDefault = False
+            StyleLookup = 'shareman_buttonVolume'
+            TabOrder = 0
+            Text = 'btnPlay'
+            OnClick = btnVolumeClick
+          end
+        end
+        object layoutTime: TLayout
+          Align = Right
+          Margins.Left = 12.000000000000000000
+          Margins.Right = 12.000000000000000000
+          Position.X = 781.000000000000000000
+          Size.Width = 105.000000000000000000
+          Size.Height = 40.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 8
+          object lblCurrentTime: TLabel
+            Align = Left
+            StyledSettings = [Family, Size, Style]
+            Size.Width = 50.000000000000000000
+            Size.Height = 40.000000000000000000
+            Size.PlatformDefault = False
+            StyleLookup = 'labelPlayingTimeStyle1'
+            TextSettings.FontColor = xA6FFFFFF
+            TextSettings.WordWrap = False
+            Text = '00:00:00'
+          end
+          object lblFullTime: TLabel
+            Align = Left
+            StyledSettings = [Family, Size, Style]
+            Position.X = 50.000000000000000000
+            Size.Width = 52.000000000000000000
+            Size.Height = 40.000000000000000000
+            Size.PlatformDefault = False
+            StyleLookup = 'labelPlayingTimeStyle1'
+            TextSettings.FontColor = x4DFFFFFF
+            TextSettings.WordWrap = False
+            Text = '/ 00:00:00'
+          end
+        end
+      end
+      object labelFileName: TLabel
+        Align = Top
+        Size.Width = 1065.000000000000000000
+        Size.Height = 80.000000000000000000
+        Size.PlatformDefault = False
+        StyleLookup = 'shareman_labelPlayerFileName'
+        TextSettings.WordWrap = False
+      end
+    end
+    inline frmOverlay: TfrmOverlay
+      Align = Client
+      HitTest = False
+      Size.Width = 1065.000000000000000000
+      Size.Height = 559.000000000000000000
+      Size.PlatformDefault = False
+      Visible = False
+      TabOrder = 0
+    end
+  end
+  object tmrToolKitVisibility: TTimer
+    Enabled = False
+    Interval = 100
+    OnTimer = tmrToolKitVisibilityTimer
+    Left = 768
+    Top = 416
+  end
+  object tmrCursor: TTimer
+    Enabled = False
+    Interval = 10
+    OnTimer = tmrCursorTimer
+    Left = 800
+    Top = 416
+  end
+  object actlstFullScreen: TActionList
+    Left = 72
+    Top = 208
+    object actFullScreen: TAction
+      Text = 'actFullScreen'
+      ShortCut = 27
+      OnExecute = actFullScreenExecute
+    end
+  end
+end

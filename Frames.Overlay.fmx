@@ -1,0 +1,32 @@
+object frmOverlay: TfrmOverlay
+  Align = Client
+  Size.Width = 1011.000000000000000000
+  Size.Height = 549.000000000000000000
+  Size.PlatformDefault = False
+  object aniIndicator: TAniIndicator
+    Align = Center
+    Enabled = True
+    StyleLookup = 'shareman_aniIndicator'
+    HitTest = False
+    Size.Width = 80.000000000000000000
+    Size.Height = 80.000000000000000000
+    Size.PlatformDefault = False
+  end
+  object panelOverlay: TPanel
+    Align = Client
+    HitTest = False
+    Size.Width = 320.000000000000000000
+    Size.Height = 240.000000000000000000
+    Size.PlatformDefault = False
+    StyleLookup = 'shareman_overlay'
+    Visible = False
+    TabOrder = 0
+    object animationfloatOverlay: TFloatAnimation
+      Delay = 1.500000000000000000
+      Duration = 0.500000000000000000
+      PropertyName = 'Opacity'
+      StartValue = 0.000000000000000000
+      StopValue = 1.000000000000000000
+    end
+  end
+end
