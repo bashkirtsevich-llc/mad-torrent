@@ -339,12 +339,12 @@ begin
             not FileExists(FFileItem.Path) or { доп. проверка. файл создается только тогда, когда в него хотя бы 1 кусок записан }
             not FFileItem.IsLoaded(pos, Min(len, Int64(ALen)))) do
     begin
-//      { показываем крутяшку }
-//      if frmOverlay.Overlay <> otLoading then
-//        TThread.Synchronize(nil, procedure
-//        begin
-//          frmOverlay.Overlay := otLoading;
-//        end);
+      { показываем крутяшку }
+      if frmOverlay.Overlay <> otLoading then
+        TThread.Synchronize(nil, procedure
+        begin
+          frmOverlay.Overlay := otLoading;
+        end);
 
       FFileItem.Require(pos, len);
 
@@ -361,12 +361,12 @@ begin
     end else
       Result := 0;
 
-//    { прячем крутяшку }
-//    if frmOverlay.Overlay <> otNone then
-//      TThread.Synchronize(nil, procedure
-//      begin
-//        frmOverlay.Overlay := otNone;
-//      end);
+    { прячем крутяшку }
+    if frmOverlay.Overlay <> otNone then
+      TThread.Synchronize(nil, procedure
+      begin
+        frmOverlay.Overlay := otNone;
+      end);
   end;
 end;
 
