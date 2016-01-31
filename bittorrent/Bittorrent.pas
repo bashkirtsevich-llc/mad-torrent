@@ -677,6 +677,7 @@ type
     procedure Touch;
     procedure Start;
     procedure Pause;
+    procedure Resume;
     procedure Stop;
     procedure Delete(ADeleteFiles: Boolean = False);
 

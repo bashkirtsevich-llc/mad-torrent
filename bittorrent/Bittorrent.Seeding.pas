@@ -204,6 +204,7 @@ type
     // управлять состоянием можно только у ЗАГРУЖАЕМОЙ раздачи
     procedure Start; inline;
     procedure Pause; inline;
+    procedure Resume; inline;
     procedure Stop; inline;
     procedure Delete(ADeleteFiles: Boolean = False);
 
@@ -1138,6 +1139,20 @@ begin
   end;
 end;
 
+procedure TSeeding.Resume;
+begin
+  Lock;
+  try
+    if ssDownloading in FStates then
+    begin
+      FStates := FStates - [ssPaused];
+      Touch;
+    end;
+  finally
+    Unlock;
+  end;
+end;
+
 procedure TSeeding.SetOnDelete(Value: TProc<ISeeding>);
 begin
   FOnDelete := Value;
@@ -1162,10 +1177,10 @@ procedure TSeeding.Start;
 begin
   Lock;
   try
-    if ssDownloading in FStates then
+    if not (ssDownloading in FStates) and not FBitField.AllTrue then
     begin
-      FStates := FStates + [ssActive] - [ssPaused];
-      Update;
+      FStates := FStates + [ssDownloading] - [ssPaused];
+      Touch;
     end;
   finally
     Unlock;
