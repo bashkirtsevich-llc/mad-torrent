@@ -863,8 +863,6 @@ begin
                   mf := TMetaFile.Create(tmp);
                   InitMetadata(mf);
 
-                  FStates := FStates + [ssActive, ssDownloading];
-
                   if Assigned(FOnMetadataLoaded) then
                     FOnMetadataLoaded(Self, mf);
                 end else
