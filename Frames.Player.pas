@@ -686,7 +686,7 @@ begin
     var
       s: Single;
     begin
-      s := ASeeding.PercentComplete;
+      s := FileItem.PercentComplete;
 
       TThread.Synchronize(nil, procedure
       begin
