@@ -4,7 +4,7 @@ interface
 
 uses
   System.SysUtils, System.Generics.Collections, System.Generics.Defaults,
-  System.Math, System.DateUtils, System.Hash,
+  System.Math, System.DateUtils, System.Hash, System.IOUtils,
   Basic.UniString,
   Common.Prelude,
   Bittorrent, Bittorrent.Bitfield, Bittorrent.Counter,
@@ -583,13 +583,20 @@ begin
 
     FFileSystem     := TFileSystem.Create(AMetafile, FDownloadPath);
 
-    FBitField       := TBitField.Create(AMetafile.PiecesCount);
+    { проверяем папку назначения }
+    if TDirectory.IsEmpty(FDownloadPath) then
+      FBitField     := TBitField.Create(AMetafile.PiecesCount)
+    else
+      FBitField     := FFileSystem.CheckFiles;
     FPeersHave      := TBitSum.Create(FBitField.Len);
 
     FDownloadQueue  := TDownloadPieceQueue.Create(AMetafile.PiecesCount,
       CancelReuests, CancelReuests);
 
-    FStates         := [ssHaveMetadata]; //- [ssCompleted]; { загружается }
+    FStates         := [ssHaveMetadata];
+
+    if FBitField.AllTrue then
+      Include(FStates, ssCompleted);
 
     FLastRequest    := Now;
   finally
