@@ -197,14 +197,19 @@ function TFileSystem.CheckFiles: TBitField;
 
   procedure NormalizePieceIndex(var APiece: Integer; ASign: TValueSign;
     AItem: IFileItem);
+  var
+    buf: TArray<IFileItem>;
   begin
     {TODO -oMAD -cMedium : проверить скорость работы этой ф-ии, насколько шустро работает FilesByPiece}
-//    while True do
-//      with FMetaFile.FilesByPiece[APiece] do
-//        if IsEmpty or ((Count = 1) and (First.HashCode = AItem.HashCode)) then
-//          Break
-//        else
-//          Inc(APiece, ASign);
+    while True do
+    begin
+      buf := FMetaFile.FilesByPiece[APiece];
+
+      if (Length(buf) = 0) or ((Length(buf) = 1) and (buf[0].HashCode = AItem.HashCode)) then
+        Break
+      else
+        Inc(APiece, ASign);
+    end;
   end;
 
 var
