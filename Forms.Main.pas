@@ -24,7 +24,6 @@ type
     styleBookShareman: TStyleBook;
     procedure FormCreate(Sender: TObject);
     procedure btnAddMagnetClick(Sender: TObject);
-    procedure lstFilesDblClick(Sender: TObject);
   private
     bt: IBittorrent;
   public
@@ -49,11 +48,6 @@ procedure TfrmMain.FormCreate(Sender: TObject);
 begin
   bt := TBittorrent.Create('MT-12345678912345678', 12346, 12346);
   bt.Start;
-end;
-
-procedure TfrmMain.lstFilesDblClick(Sender: TObject);
-begin
-//
 end;
 
 end.
