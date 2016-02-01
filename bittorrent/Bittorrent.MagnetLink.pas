@@ -84,6 +84,8 @@ procedure TMagnetLink.ParseMagnetLink(const AURL: string);
       Result := HexToUnistring(s2);
     end;
 
+  var
+    tr: string;
   begin
     if AKey = 'xt' then // exact topic
     begin
@@ -91,8 +93,12 @@ procedure TMagnetLink.ParseMagnetLink(const AURL: string);
       FInfoHash.Assign(ParseInfoHash(AValue));
     end else
     if AKey = 'tr' then // address tracker
-      FTrackers.Add(TIdURI.URLDecode(AValue))
-    else
+    begin
+      tr := TIdURI.URLDecode(AValue);
+
+      if not FTrackers.Contains(tr) then
+        FTrackers.Add(tr);
+    end else
     if AKey = 'dn' then // display name
       FDisplayName := TIdURI.URLDecode(AValue.Replace('+', ' '));
     {
