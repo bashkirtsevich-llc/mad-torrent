@@ -686,12 +686,15 @@ begin
     var
       s: Single;
     begin
-      s := FileItem.PercentComplete;
-
-      TThread.Synchronize(nil, procedure
+      if Assigned(FileItem) then
       begin
-        pbLoadingState.Value := s;
-      end);
+        s := FileItem.PercentComplete;
+
+        TThread.Synchronize(nil, procedure
+        begin
+          pbLoadingState.Value := s;
+        end);
+      end;
     end;
 
     FSeeding.OnMetadataLoaded := procedure (ASeeding: ISeeding; AMetaFile: IMetaFile)
