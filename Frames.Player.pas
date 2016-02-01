@@ -8,7 +8,7 @@ uses
 
   Winapi.Windows,
 
-  FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.StdCtrls,
+  FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.StdCtrls, FMX.Ani,
   FMX.Objects, FMX.Layouts, FMX.Surfaces, System.Actions,
 
   PasLibVlcUnit,
@@ -92,6 +92,13 @@ type
     procedure FadeControlIn(AControl: TControl);
     function CalcRequireSize: Int64; inline;
 
+    procedure Animate(ATarget: TFmxObject; AProperty: string; AValue: Single;
+      AWait: Boolean = False; ADuration: Single = 0.15;
+      AAnimationType: TAnimationType = TAnimationType.InOut;
+      AInterpolation: TInterpolationType = TInterpolationType.Linear);
+
+    function PointInPanel(panel: TRectF): Boolean;
+
     function OnPlayerOpen(APlayer: TVLCPlayer): Int64;
     function OnPlayerRead(APlayer: TVLCPlayer; ABuf: PByte; ALen: Integer): Integer;
     procedure OnPlayerSeek(APlayer: TVLCPlayer; AOffset: Int64);
@@ -122,7 +129,7 @@ uses
 { TframePlayer }
 
 var
-//  dx, dy        : Single; //для хранения координат мыши
+  dx, dy        : Single; //для хранения координат мыши
 
   FWindowRect   : TRect;
   FWindowState  : TWindowState;
@@ -384,6 +391,23 @@ begin
   end;
 end;
 
+function TfrmPlayer.PointInPanel(panel: TRectF): Boolean;
+var
+  X, Y: Single;
+begin
+  X := Screen.MousePos.X;
+  Y := Screen.MousePos.Y;
+
+  if (X < panel.Left) or
+     (X > panel.Right) or
+     (Y < panel.Top) or
+     (Y > panel.Bottom)
+  then
+    Result := False
+  else
+    Result := True;
+end;
+
 procedure TfrmPlayer.tmrCursorTimer(Sender: TObject);
 var
   LInput: TLastInputInfo;
@@ -399,8 +423,8 @@ end;
  *)
 
 procedure TfrmPlayer.tmrToolKitVisibilityTimer(Sender: TObject);
-//var
-//  b: Boolean;
+var
+  b: Boolean;
 begin
 //  if Parent = frmMain.tabItemPlayer then
 //  begin
@@ -409,23 +433,23 @@ begin
 //    FadeControlIn(labelFileName);
 //    Exit;
 //  end;
-//
-//  b := ((dx - 2) <= Screen.MousePos.X) and ((dy - 2) <= Screen.MousePos.Y) and
-//       ((dx + 2) >= Screen.MousePos.X) and ((dy + 2) >= Screen.MousePos.Y) and
-//       not PointInPanel(pnlPlayerToolKit.AbsoluteRect);
-//
-//  Animate(pnlPlayerToolKit, 'Opacity', IfThen(b, 0, 1));
-//  Animate(labelFileName, 'Opacity', IfThen(b, 0, 1));
-//
-//  tmrToolKitVisibility.Interval := IfThen(b, 100, 1500);
-//
-//  if b then
-//	rectangleScreen.Cursor := crNone
-//  else
-//  	rectangleScreen.Cursor := crDefault;
-//
-//  dx := Screen.MousePos.X;
-//  dy := Screen.MousePos.Y;
+
+  b := ((dx - 2) <= Screen.MousePos.X) and ((dy - 2) <= Screen.MousePos.Y) and
+       ((dx + 2) >= Screen.MousePos.X) and ((dy + 2) >= Screen.MousePos.Y) and
+       not PointInPanel(pnlPlayerToolKit.AbsoluteRect);
+
+  Animate(pnlPlayerToolKit, 'Opacity', IfThen(b, 0, 1));
+  Animate(labelFileName, 'Opacity', IfThen(b, 0, 1));
+
+  tmrToolKitVisibility.Interval := IfThen(b, 100, 1500);
+
+  if b then
+	rectangleScreen.Cursor := crNone
+  else
+  	rectangleScreen.Cursor := crDefault;
+
+  dx := Screen.MousePos.X;
+  dy := Screen.MousePos.Y;
 end;
 
 procedure TfrmPlayer.trackBarPlayingChange(Sender: TObject);
@@ -530,6 +554,19 @@ end;
  * Обработчик события клика кнопки «Во весь экран»
  *)
 
+procedure TfrmPlayer.Animate(ATarget: TFmxObject; AProperty: string;
+  AValue: Single; AWait: Boolean; ADuration: Single;
+  AAnimationType: TAnimationType; AInterpolation: TInterpolationType);
+begin
+  if Assigned(ATarget) then
+  begin
+    if not AWait then
+      TAnimator.AnimateFloat(ATarget, AProperty, AValue, ADuration, AAnimationType, AInterpolation)
+    else
+      TAnimator.AnimateFloatWait(ATarget, AProperty, AValue, ADuration, AAnimationType, AInterpolation);
+  end;
+end;
+
 procedure TfrmPlayer.btnFullScreenClick(Sender: TObject);
 begin
   rectangleScreen.Cursor := crDefault;
@@ -584,12 +621,12 @@ procedure TfrmPlayer.btnVolumeClick(Sender: TObject);
 begin
   btnVolume.Tag := IfThen(btnVolume.Tag = 0, 1, 0);
   //setButtonIcon(TButton(Sender), 'pathSound', 'pathMute');
-//  if (btnVolume.Tag = 1) then
-//  begin
-//    trckbrVolume.TagFloat := trckbrVolume.Value;
-//    Animate(trckbrVolume, 'Value', 0);
-//  end else
-//    Animate(trckbrVolume, 'Value', trckbrVolume.TagFloat, False, 0.15, TAnimationType.Out);
+  if (btnVolume.Tag = 1) then
+  begin
+    trckbrVolume.TagFloat := trckbrVolume.Value;
+    Animate(trckbrVolume, 'Value', 0);
+  end else
+    Animate(trckbrVolume, 'Value', trckbrVolume.TagFloat, False, 0.15, TAnimationType.Out);
 end;
 
 procedure TfrmPlayer.SetPlayingState(APlaying: Boolean);
@@ -605,9 +642,9 @@ begin
         Height  := 100;
         Opacity := 1;
 
-//        Animate(pnlState, 'Height' , 120, False, 0.3);
-//        Animate(pnlState, 'Width'  , 120, False, 0.3);
-//        Animate(pnlState, 'Opacity',   0, False, 0.3);
+        Animate(pnlState, 'Height' , 120, False, 0.3);
+        Animate(pnlState, 'Width'  , 120, False, 0.3);
+        Animate(pnlState, 'Opacity',   0, False, 0.3);
       end;
     end
   );

@@ -21,6 +21,7 @@ type
     edtMagnet: TEdit;
     btnAddMagnet: TButton;
     frmPlayer: TfrmPlayer;
+    styleBookShareman: TStyleBook;
     procedure FormCreate(Sender: TObject);
     procedure btnAddMagnetClick(Sender: TObject);
     procedure lstFilesDblClick(Sender: TObject);
