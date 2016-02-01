@@ -141,6 +141,7 @@ type
     FPeers: TList<IPeer>; // их бы сортировать по скорости и количеству отдаваемго
     FListenPort: TIdPort;
     FTrackers: TList<ITracker>;
+    FLastTrackersSync: TDateTime;
     FPiecesBuf: TDictionary<Integer, IPiece>;
     FStates: TSeedingStates;
     FBitField: TBitField; // маска загрузки
@@ -411,6 +412,7 @@ begin
   FBlackList      := TDictionary<string, TDateTime>.Create;
   FBlackListTime  := ABlackListTime;
 
+  FLastTrackersSync := MinDateTime;
   FEndGame        := False;
   FEndGameList    := TDictionary<IPeer, TArray<Integer>>.Create;
   FCounter        := TCounter.Create;
@@ -584,10 +586,11 @@ begin
     FFileSystem     := TFileSystem.Create(AMetafile, FDownloadPath);
 
     { проверяем папку назначения }
-    if TDirectory.IsEmpty(FDownloadPath) then
+    if TDirectory.Exists(FDownloadPath) and TDirectory.IsEmpty(FDownloadPath) then
       FBitField     := TBitField.Create(AMetafile.PiecesCount)
     else
       FBitField     := FFileSystem.CheckFiles;
+
     FPeersHave      := TBitSum.Create(FBitField.Len);
 
     FDownloadQueue  := TDownloadPieceQueue.Create(AMetafile.PiecesCount,
@@ -1231,21 +1234,28 @@ var
 begin
   Lock;
   try
-    { устанавливаем данные трекерам и вызываем им всем Sync }
-    for tr in FTrackers do
-      if not tr.Busy then
-      begin
-        if Supports(tr, IStatTracker, trstat) then
-        with trstat do
+    t := Now;
+
+    if SecondsBetween(t, FLastTrackersSync) >= 1 then
+    begin
+      { устанавливаем данные трекерам и вызываем им всем Sync }
+      for tr in FTrackers do
+        if not tr.Busy then
         begin
-          BytesUploaded    := FCounter.TotalUploaded;
-          BytesDownloaded  := GetCompeteSize;
-          BytesLeft        := GetTotalSize - GetCompeteSize;
-          BytesCorrupt     := GetCorruptedSize;
+          if Supports(tr, IStatTracker, trstat) then
+          with trstat do
+          begin
+            BytesUploaded    := FCounter.TotalUploaded;
+            BytesDownloaded  := GetCompeteSize;
+            BytesLeft        := GetTotalSize - GetCompeteSize;
+            BytesCorrupt     := GetCorruptedSize;
+          end;
+
+          tr.Sync;
         end;
 
-        tr.Sync;
-      end;
+      FLastTrackersSync := t;
+    end;
 
     if not(ssActive in FStates) then
       Exit;
@@ -1331,8 +1341,6 @@ begin
           Break;
         end;
       end;
-
-    t := Now;
 
     if haveMD and (SecondsBetween(t, FLastCacheClear) >= CacheClearInterval) then
     begin
