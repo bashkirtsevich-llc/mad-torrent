@@ -64,7 +64,8 @@ var
 begin
   if FInputBuffer.Size = 0 then
   begin
-    ReceiveBuffer(LBytes, ATimeout);
+    SetLength(LBytes, Word.MaxValue);
+    SetLength(LBytes, ReceiveBuffer(LBytes, ATimeout));
     FInputBuffer.Write(LBytes);
   end;
 
