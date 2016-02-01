@@ -229,7 +229,6 @@ end;
 
 procedure TfrmPlayer.lstFilesDblClick(Sender: TObject);
 var
-  lst: TArray<ISeedingItem>;
   it: ISeedingItem;
   s: string;
 begin
@@ -239,13 +238,15 @@ begin
 
     Lock;
     try
-      lst := FSeeding.Items.ToArray;
-
-      for it in lst do
+      for it in FSeeding.Items.ToArray do
         if it.Path.Contains(s) then
         begin
           SetFileItem(it);
+
           lstFiles.Visible := False;
+
+          FSeeding.Start;
+
           Break;
         end;
     finally
