@@ -31,6 +31,7 @@ type
     FTrackerURI: TIdURI;
     FKey: Integer;
     FPeerID: TUniString;
+    FConnectionID: Int64;
     FTransactionID: Integer;
     FConnected: Boolean;
     FLeechers: Integer;
@@ -91,6 +92,8 @@ begin
       udp.Host := FTrackerURI.Host;
       udp.Port := FTrackerURI.Port.ToInteger;
 
+      udp.Connect;
+
       if not FConnected then
       begin
         GenTransactionID;
@@ -109,10 +112,11 @@ begin
             RaiseTrackerNoResponse
           else
             FConnected := (ReadInt32 = taConnect.AsInteger) and
-                          (ReadInt32 = FTransactionID) and
-                          (ReadInt64 = ConnectionID);
+                          (ReadInt32 = FTransactionID);
 
-          if not FConnected then
+          if FConnected then
+            FConnectionID := ReadInt64
+          else
             RaiseTrackerInvalidResponse;
         end;
       end;
@@ -123,7 +127,7 @@ begin
       begin
         WriteBufferOpen;
 
-        Write(ConnectionID);
+        Write(FConnectionID);
         Write(taAnnounce.AsInteger);
         Write(FTransactionID);
         WriteUniString(FInfoHash);
@@ -171,11 +175,16 @@ begin
       end;
 
     finally
+      if udp.Connected then
+        udp.Disconnect;
+
       udp.Free;
     end;
   except
     FAnnounceInterval := 60;
   end;
+
+  inherited DoAnnounce;
 end;
 
 procedure TUDPTracker.DoRetrack;
@@ -190,7 +199,7 @@ begin
   oldTID := FTransactionID;
   repeat
     FTransactionID := Random(Integer.MaxValue);
-  until (FTransactionID = oldTID);
+  until FTransactionID <> oldTID;
 end;
 
 procedure TUDPTracker.RaiseTrackerInvalidResponse;
