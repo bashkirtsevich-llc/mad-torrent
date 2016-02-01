@@ -29,8 +29,8 @@ type
     FAnnounceInterval: Integer;
     FRetrackInterval: Integer;
 
-    procedure DoAnnounce; virtual; abstract;
-    procedure DoRetrack; virtual; abstract;
+    procedure DoAnnounce; virtual;
+    procedure DoRetrack; virtual;
 
     procedure ResponsePeerInfo(const AHost: string; APort: TIdPort); inline;
     procedure DoSync; override; final;
@@ -85,6 +85,16 @@ begin
   FRetrackInterval  := ARetrackInterval;
   FLastAnnounce     := MinDateTime;
   FLastRetrack      := MinDateTime;
+end;
+
+procedure TTRacker.DoAnnounce;
+begin
+  FLastAnnounce := Now;
+end;
+
+procedure TTRacker.DoRetrack;
+begin
+  FLastRetrack := Now;
 end;
 
 procedure TTRacker.DoSync;

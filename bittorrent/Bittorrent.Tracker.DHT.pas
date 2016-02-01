@@ -59,11 +59,15 @@ end;
 procedure TDHTTracker.DoAnnounce;
 begin
   HandleTaskLoop(FAnnounceTask);
+
+  inherited DoAnnounce;
 end;
 
 procedure TDHTTracker.DoRetrack;
 begin
   HandleTaskLoop(FGetPeersTask);
+
+  inherited DoRetrack;
 end;
 
 procedure TDHTTracker.HandleTaskLoop(ATask: IFindPeersTask);

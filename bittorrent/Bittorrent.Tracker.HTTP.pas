@@ -115,11 +115,13 @@ begin
   except
     FAnnounceInterval := 60;
   end;
+
+  inherited DoAnnounce;
 end;
 
 procedure THTTPTracker.DoRetrack;
 begin
-
+  inherited DoRetrack;
 end;
 
 function THTTPTracker.ParseAnnounceResponse(ALen: Integer;
