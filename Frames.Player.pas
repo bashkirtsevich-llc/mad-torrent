@@ -5,6 +5,7 @@ interface
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
   System.SyncObjs, System.TimeSpan, System.Rtti, System.Math, System.DateUtils,
+  System.IOUtils,
 
   Winapi.Windows,
 
@@ -342,40 +343,47 @@ begin
     end else
       pos := 0;
 
-    len := calcRequireSize;
+    try
+      len := calcRequireSize;
 
-    while Assigned(FFileItem) and (
-            not FileExists(FFileItem.Path) or { доп. проверка. файл создается только тогда, когда в него хотя бы 1 кусок записан }
-            not FFileItem.IsLoaded(pos, Min(len, Int64(ALen)))) do
-    begin
-      { показываем крутяшку }
-      if frmOverlay.Overlay <> otLoading then
+      while Assigned(FFileItem) and (
+              not FileExists(FFileItem.Path) or { доп. проверка. файл создается только тогда, когда в него хотя бы 1 кусок записан }
+              not FFileItem.IsLoaded(pos, Min(len, Int64(ALen)))) do
+      begin
+        { показываем крутяшку }
+        if frmOverlay.Overlay <> otLoading then
+          TThread.Synchronize(nil, procedure
+          begin
+            frmOverlay.Overlay := otLoading;
+          end);
+
+        { проверяем, дёргает ли юзет трекбар }
+        if FMouseDroped then
+        begin
+          FFileItem.Require(pos, len);
+
+          Sleep(10);
+        end else
+          Exit(0); { да, скроллит }
+      end;
+
+      if Assigned(FFileItem) and TFile.Exists(FFileItem.Path) then
+      begin
+        if not Assigned(FFileStream) then
+          FFileStream := TFileStream.Create(FFileItem.Path, fmOpenRead or fmShareDenyNone);
+
+        with FFileStream do
+          Result := Read(ABuf^, Min(Int64(ALen), Size - Position));
+      end else
+        Result := 0;
+    finally
+      { прячем крутяшку }
+      if frmOverlay.Overlay <> otNone then
         TThread.Synchronize(nil, procedure
         begin
-          frmOverlay.Overlay := otLoading;
+          frmOverlay.Overlay := otNone;
         end);
-
-      FFileItem.Require(pos, len);
-
-      Sleep(10);
     end;
-
-    if Assigned(FFileItem) and FileExists(FFileItem.Path) then
-    begin
-      if not Assigned(FFileStream) then
-        FFileStream := TFileStream.Create(FFileItem.Path, fmOpenRead or fmShareDenyNone);
-
-      with FFileStream do
-        Result := Read(ABuf^, Min(Int64(ALen), Size - Position));
-    end else
-      Result := 0;
-
-    { прячем крутяшку }
-    if frmOverlay.Overlay <> otNone then
-      TThread.Synchronize(nil, procedure
-      begin
-        frmOverlay.Overlay := otNone;
-      end);
   end;
 end;
 
