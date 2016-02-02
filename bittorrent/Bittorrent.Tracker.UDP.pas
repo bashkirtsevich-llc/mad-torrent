@@ -179,10 +179,9 @@ end;
 procedure TUDPTracker.DoRetrack;
 begin
   if FConnected then
-  try
     UDPRequest(procedure (AUDP: TUDPClient)
     var
-      s, l, c: Integer;
+      s{, l, c}: Integer;
     begin
       { Scrape }
 
@@ -208,8 +207,8 @@ begin
         begin
           { scrape response }
           s := ReadInt32;
-          c := ReadInt32;
-          l := ReadInt32;
+          {c := ReadInt32;
+          l := ReadInt32;}
 
           { сигналим, что надо сделать реаннонс для получения списка пиров }
           if s > FSeeders then
@@ -217,9 +216,6 @@ begin
         end;
       end;
     end);
-  except
-    FRetrackInterval := 60;
-  end;
 
   inherited DoRetrack;
 end;
