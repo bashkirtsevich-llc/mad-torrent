@@ -298,6 +298,10 @@ begin
         FPeers.Add(ApplyPeerCallbacks(TPeer.Create(FThreadPool, ip, APort,
           FInfoHash, FClientID, AIPVer)));
 
+        {$IFDEF DEBUG}
+        DebugOutput('add peer ' + addr);
+        {$ENDIF}
+
         Touch; { пинаем раздачу, пусть пробует качать }
       end;
     end;
@@ -1354,13 +1358,14 @@ begin
     if alive then
       Touch
     else
-    if (SecondsBetween(t, FLastRequest) >= MaxIdleTime) or (not weload and (
-          Length(TPrelude.Filter<IPeer>(FPeers.ToArray,
+    if haveMD and ((SecondsBetween(t, FLastRequest) >= MaxIdleTime) or
+        (not weload and (Length(TPrelude.Filter<IPeer>(FPeers.ToArray,
             function(APeer: IPeer): Boolean
             begin
               Result := APeer.ConnectionType = ctIncoming;
             end)
-          ) = 0
+            ) = 0
+          )
         )
       ) then
     begin
