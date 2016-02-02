@@ -316,8 +316,8 @@ type
     procedure SetOnInterest(Value: TProc<IPeer>);
     function GetOnNotInerest: TProc<IPeer>;
     procedure SetOnNotInerest(Value: TProc<IPeer>);
-    function GetOnStart: TProc<IPeer, TUniString, TBitField>;
-    procedure SetOnStart(Value: TProc<IPeer, TUniString, TBitField>);
+    function GetOnBitfield: TProc<IPeer, TUniString, TBitField>;
+    procedure SetOnBitfield(Value: TProc<IPeer, TUniString, TBitField>);
     function GetOnHave: TProc<IPeer, Integer>;
     procedure SetOnHave(Value: TProc<IPeer, Integer>);
     function GetOnRequest: TProc<IPeer, Integer, Integer, Integer>;
@@ -386,7 +386,7 @@ type
     property OnInterest: TProc<IPeer> read GetOnInterest write SetOnInterest;
     property OnNotInerest: TProc<IPeer> read GetOnNotInerest write SetOnNotInerest;
 
-    property OnStart: TProc<IPeer, TUniString, TBitField> read GetOnStart write SetOnStart;
+    property OnBitfield: TProc<IPeer, TUniString, TBitField> read GetOnBitfield write SetOnBitfield;
     property OnHave: TProc<IPeer, Integer { index }> read GetOnHave write SetOnHave;
     // с нас запрашивают блок index    offset   size     data
     property OnRequest: TProc<IPeer, Integer, Integer, Integer>
@@ -1213,7 +1213,7 @@ begin
       allOK := True;
     end;
 
-    peer.OnStart := procedure (APeer: IPeer; AInfoHash: TUniString;
+    peer.OnBitfield := procedure (APeer: IPeer; AInfoHash: TUniString;
       AHave: TBitField)
     var
       seeding: ISeeding;

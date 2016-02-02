@@ -35,7 +35,7 @@ type
     FOnUnchoke: TProc<IPeer>;
     FOnInterest: TProc<IPeer>;
     FOnNotInterest: TProc<IPeer>;
-    FOnStart: TProc<IPeer, TUniString, TBitField>;
+    FOnBitfield: TProc<IPeer, TUniString, TBitField>;
     FOnHave: TProc<IPeer, Integer>;
     FOnRequestPiece: TProc<IPeer, Integer, Integer, Integer>;
     FOnPiece: TProc<IPeer, Integer, Integer, TUniString>;
@@ -73,8 +73,8 @@ type
     procedure SetOnInterest(Value: TProc<IPeer>); inline;
     function GetOnNotInerest: TProc<IPeer>; inline;
     procedure SetOnNotInerest(Value: TProc<IPeer>); inline;
-    function GetOnStart: TProc<IPeer, TUniString, TBitField>; inline;
-    procedure SetOnStart(Value: TProc<IPeer, TUniString, TBitField>); inline;
+    function GetOnBitfield: TProc<IPeer, TUniString, TBitField>; inline;
+    procedure SetOnBitfield(Value: TProc<IPeer, TUniString, TBitField>); inline;
     function GetOnHave: TProc<IPeer, Integer>; inline;
     procedure SetOnHave(Value: TProc<IPeer, Integer>); inline;
     function GetOnRequest: TProc<IPeer, Integer, Integer, Integer>; inline;
@@ -134,7 +134,7 @@ type
     procedure DoInterested; inline;
     procedure DoNotInterested; inline;
     procedure DoHave(APieceIndex: Integer); inline;
-    procedure DoStart(const ABitField: TBitField); inline;
+    procedure DoBitfield(const ABitField: TBitField); inline;
     procedure DoRequest(APieceIndex, AOffset, ASize: Integer); inline;
     procedure DoPiece(APieceIndex, AOffset: Integer; const ABlock: TUniString); inline;
     procedure DoCancel(APieceIndex, AOffset: Integer); inline;
@@ -336,9 +336,9 @@ begin
   Result := FConnection.IPVer;
 end;
 
-function TPeer.GetOnStart: TProc<IPeer, TUniString, TBitField>;
+function TPeer.GetOnBitfield: TProc<IPeer, TUniString, TBitField>;
 begin
-  Result := FOnStart;
+  Result := FOnBitfield;
 end;
 
 function TPeer.GetOnCancel: TProc<IPeer, Integer, Integer>;
@@ -598,9 +598,9 @@ begin
     FOnUpdateCounter(Self, dDelta, uDelta);
 end;
 
-procedure TPeer.SetOnStart(Value: TProc<IPeer, TUniString, TBitField>);
+procedure TPeer.SetOnBitfield(Value: TProc<IPeer, TUniString, TBitField>);
 begin
-  FOnStart := Value;
+  FOnBitfield := Value;
 end;
 
 procedure TPeer.SetOnCancel(Value: TProc<IPeer, Integer, Integer>);
@@ -673,12 +673,12 @@ begin
   FOnUpdateCounter := Value;
 end;
 
-procedure TPeer.DoStart(const ABitField: TBitField);
+procedure TPeer.DoBitfield(const ABitField: TBitField);
 begin
   FBitfield := ABitField;
 
-  if Assigned(FOnStart) then
-    FOnStart(Self, FInfoHash, ABitField);
+  if Assigned(FOnBitfield) then
+    FOnBitfield(Self, FInfoHash, ABitField);
 end;
 
 procedure TPeer.DoCancel(APieceIndex, AOffset: Integer);
@@ -734,7 +734,7 @@ begin
         DoHave(PieceIndex);
     idBitfield      :  { список кусков, которые он имеет }
       with (AMessage as IBitfieldMessage) do
-        DoStart(BitField);
+        DoBitfield(BitField);
     idRequest       :  { с нас запросили куск/блок }
       with (AMessage as IRequestMessage) do
         DoRequest(PieceIndex, Offset, Size);

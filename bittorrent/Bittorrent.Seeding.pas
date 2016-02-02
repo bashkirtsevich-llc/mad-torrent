@@ -218,7 +218,7 @@ type
     procedure OnPeerConnect(APeer: IPeer; AMessage: IMessage);
     procedure OnPeerDisconnect(APeer: IPeer);
     procedure OnPeerException(APeer: IPeer; AException: Exception);
-    procedure OnPeerStart(APeer: IPeer; AInfoHash: TUniString;
+    procedure OnPeerBitfield(APeer: IPeer; AInfoHash: TUniString;
       ABitField: TBitField);
     procedure OnPeerHave(APeer: IPeer; APieceIndex: Integer);
 
@@ -345,7 +345,7 @@ begin
   Result.OnConnect          := OnPeerConnect;
   Result.OnDisonnect        := OnPeerDisconnect;
   Result.OnException        := OnPeerException;
-  Result.OnStart            := OnPeerStart;
+  Result.OnBitfield         := OnPeerBitfield;
   Result.OnRequest          := OnPeerRequest;
   Result.OnHave             := OnPeerHave;
   Result.OnCancel           := OnPeerCancel;
@@ -1042,7 +1042,7 @@ begin
   end;
 end;
 
-procedure TSeeding.OnPeerStart(APeer: IPeer; AInfoHash: TUniString;
+procedure TSeeding.OnPeerBitfield(APeer: IPeer; AInfoHash: TUniString;
   ABitField: TBitField);
 begin
   Lock;
@@ -1121,7 +1121,7 @@ begin
   APeer.OnConnect       := nil;
   APeer.OnDisonnect     := nil;
   APeer.OnException     := nil;
-  APeer.OnStart         := nil;
+  APeer.OnBitfield      := nil;
   APeer.OnRequest       := nil;
   APeer.OnHave          := nil;
   APeer.OnCancel        := nil;
