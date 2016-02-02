@@ -4,7 +4,7 @@ interface
 
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
-  System.SyncObjs, System.TimeSpan, System.Rtti, System.Math,
+  System.SyncObjs, System.TimeSpan, System.Rtti, System.Math, System.DateUtils,
 
   Winapi.Windows,
 
@@ -81,6 +81,7 @@ type
     FPlaying    : Boolean;
     FMouseDroped: Boolean;
     FSeeding: ISeeding;
+    FLaslUpdate: TDateTime;
 
     procedure Lock; inline;
     procedure Unlock; inline;
@@ -686,7 +687,7 @@ begin
     var
       s: Single;
     begin
-      if Assigned(FileItem) then
+      if Assigned(FileItem) and (SecondsBetween(Now, FLaslUpdate) >= 3) then
       begin
         s := FileItem.PercentComplete;
 
@@ -694,6 +695,8 @@ begin
         begin
           pbLoadingState.Value := s;
         end);
+
+        FLaslUpdate := Now;
       end;
     end;
 
@@ -751,6 +754,7 @@ var
 begin
   inherited;
 
+  FLaslUpdate   := MinDateTime;
   FLock        := TObject.Create;
   FPlaying     := False;
   FMouseDroped := False;
