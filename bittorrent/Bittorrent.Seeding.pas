@@ -580,7 +580,7 @@ begin
             10),
           20),
         30, FItems),
-      30
+      1
     );
 
     FFileSystem     := TFileSystem.Create(AMetafile, FDownloadPath);
@@ -948,6 +948,9 @@ begin
     if p.Completed then
     try
       try
+        {$IFDEF DEBUG}
+        DebugOutput('write piece ' + p.Index.ToString);
+        {$ENDIF}
         FFileSystem.PieceWrite(p);
       except
         on E: EFileSystemWriteException do
