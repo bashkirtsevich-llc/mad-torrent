@@ -73,6 +73,7 @@ type
     class operator Subtract(const A: TBitSum; B: TBitField): TBitSum;
   private
     function GetLen: Integer; inline;
+    procedure SetLen(const Value: Integer); inline;
   private
     function GetSums(Index: Integer): Byte;
   public
@@ -85,7 +86,7 @@ type
       AExcludeMask: TBitField): TArray<Integer>; overload;
     function GetBestPieces(AMaxCount: Integer): TArray<Integer>; overload;
 
-    property Len: Integer read GetLen;
+    property Len: Integer read GetLen write SetLen;
     property Sums[Index: Integer]: Byte read GetSums; default;
   private
     class procedure Check(const A, B: TBitSum); static; inline;
@@ -619,6 +620,12 @@ procedure TBitSum.Inc(AIndex: Integer);
 begin
   if FSum[AIndex] < 255 then
     System.Inc(FSum[AIndex]);
+end;
+
+procedure TBitSum.SetLen(const Value: Integer);
+begin
+  if GetLen <> Value then
+    SetLength(FSum, Value);
 end;
 
 class operator TBitSum.Subtract(const A: TBitSum; B: TBitField): TBitSum;
