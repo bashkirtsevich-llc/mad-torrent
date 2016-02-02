@@ -357,7 +357,7 @@ begin
 
       FFileItem.Require(pos, len);
 
-      Sleep(1);
+      Sleep(10);
     end;
 
     if Assigned(FFileItem) and FileExists(FFileItem.Path) then
