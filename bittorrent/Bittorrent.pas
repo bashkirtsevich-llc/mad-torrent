@@ -620,7 +620,10 @@ type
 
   IRequestFirstPicker = interface(IPiecePicker)
   ['{01A53CC5-652B-49A2-A680-63B180319B64}']
+    function GetIsEmpty: Boolean;
     function Push(AIndex: Integer): Boolean;
+
+    property IsEmpty: Boolean read GetIsEmpty;
   end;
 
   IMagnetLink = interface

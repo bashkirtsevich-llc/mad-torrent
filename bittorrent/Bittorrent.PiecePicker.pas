@@ -65,6 +65,7 @@ type
     FStack: TStack<Integer>;
     FCanPass: Boolean;
     function Push(AIndex: Integer): Boolean;
+    function GetIsEmpty: Boolean; inline;
   strict protected
     function PassToNextPicker: Boolean; override; final;
     function DoFetch(AAvailable: TBitField;
@@ -345,6 +346,11 @@ begin
     end else
       FCanPass  := False;
   end;
+end;
+
+function TRequestFirstPicker.GetIsEmpty: Boolean;
+begin
+  Result := FStack.Count = 0;
 end;
 
 function TRequestFirstPicker.PassToNextPicker: Boolean;
