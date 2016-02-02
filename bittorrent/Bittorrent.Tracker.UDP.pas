@@ -39,6 +39,7 @@ type
     procedure GenTransactionID;
     procedure RaiseTrackerNoResponse; inline;
     procedure RaiseTrackerInvalidResponse; inline;
+    procedure UDPRequest(ACallback: TProc<TUDPClient>);
   protected
     procedure DoAnnounce; override; final;
     procedure DoRetrack; override; final;
@@ -83,22 +84,16 @@ end;
 
 procedure TUDPTracker.DoAnnounce;
 var
-  udp: TUDPClient;
   peerPort: TIdPort;
 begin
   try
-    udp := TUDPClient.Create(nil);
-    try
-      udp.Host := FTrackerURI.Host;
-      udp.Port := FTrackerURI.Port.ToInteger;
-
-      udp.Connect;
-
+    UDPRequest(procedure (AUDP: TUDPClient)
+    begin
       if not FConnected then
       begin
         GenTransactionID;
 
-        with udp do
+        with AUDP do
         begin
           WriteBufferOpen;
 
@@ -123,7 +118,7 @@ begin
 
       { Announce }
 
-      with udp do
+      with AUDP do
       begin
         WriteBufferOpen;
 
@@ -131,7 +126,7 @@ begin
         Write(taAnnounce.AsInteger);
         Write(FTransactionID);
         WriteUniString(FInfoHash);
-        WriteUniString('12345123451234512345'); //WriteUniString(FPeerID);
+        WriteUniString(FPeerID);
         Write(FBytesDownloaded);
         Write(FBytesLeft);
         Write(FBytesUploaded);
@@ -173,13 +168,7 @@ begin
           end;
         end;
       end;
-
-    finally
-      if udp.Connected then
-        udp.Disconnect;
-
-      udp.Free;
-    end;
+    end);
   except
     FAnnounceInterval := 60;
   end;
@@ -189,7 +178,50 @@ end;
 
 procedure TUDPTracker.DoRetrack;
 begin
+  if FConnected then
+  try
+    UDPRequest(procedure (AUDP: TUDPClient)
+    var
+      s, l, c: Integer;
+    begin
+      { Scrape }
 
+      with AUDP do
+      begin
+        WriteBufferOpen;
+
+        Write(FConnectionID);
+        Write(taScrape.AsInteger);
+        Write(FTransactionID);
+        WriteUniString(FInfoHash);
+
+        WriteBufferFlush;
+
+        if not CheckForDataOnSource then
+          RaiseTrackerNoResponse
+        else
+        if (InputBufferSize < 8) or
+           (ReadInt32 <> taScrape.AsInteger) or
+           (ReadInt32 <> FTransactionID) then
+          RaiseTrackerInvalidResponse
+        else
+        begin
+          { scrape response }
+          s := ReadInt32;
+          c := ReadInt32;
+          l := ReadInt32;
+
+          { сигналим, что надо сделать реаннонс для получения списка пиров }
+          if s > FSeeders then
+            FAnnounceInterval := 1;
+        end;
+      end;
+    end);
+  except
+    FRetrackInterval := 60;
+  end;
+
+  inherited DoRetrack;
 end;
 
 procedure TUDPTracker.GenTransactionID;
@@ -210,6 +242,28 @@ end;
 procedure TUDPTracker.RaiseTrackerNoResponse;
 begin
   raise ETrackerNoResponse.Create('UDP tracker has no response');
+end;
+
+procedure TUDPTracker.UDPRequest(ACallback: TProc<TUDPClient>);
+var
+  udp: TUDPClient;
+begin
+  Assert(Assigned(ACallback));
+
+  udp := TUDPClient.Create(nil);
+  try
+    udp.Host := FTrackerURI.Host;
+    udp.Port := FTrackerURI.Port.ToInteger;
+
+    udp.Connect;
+
+    ACallback(udp);
+  finally
+    if udp.Connected then
+      udp.Disconnect;
+
+    udp.Free;
+  end;
 end;
 
 end.
