@@ -595,7 +595,7 @@ begin
     else
       FBitField     := FFileSystem.CheckFiles;
 
-    FPeersHave      := TBitSum.Create(FBitField.Len);
+    FPeersHave.Len  := AMetafile.PiecesCount;
 
     FDownloadQueue  := TDownloadPieceQueue.Create(AMetafile.PiecesCount,
       CancelReuests, CancelReuests);
@@ -899,6 +899,8 @@ procedure TSeeding.OnPeerHave(APeer: IPeer; APieceIndex: Integer);
 begin
   Lock;
   try
+    { расширяем сумму }
+    FPeersHave.Len := Max(FPeersHave.Len, APieceIndex);
     { добавляем в сумму индекс, который до этого отсутствовал у пира }
     FPeersHave.Inc(APieceIndex);
   finally
