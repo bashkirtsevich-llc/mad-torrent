@@ -179,6 +179,7 @@ end;
 procedure TUDPTracker.DoRetrack;
 begin
   if FConnected then
+  try
     UDPRequest(procedure (AUDP: TUDPClient)
     var
       s{, l, c}: Integer;
@@ -216,6 +217,8 @@ begin
         end;
       end;
     end);
+  except
+  end;
 
   inherited DoRetrack;
 end;
