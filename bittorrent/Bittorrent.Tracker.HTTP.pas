@@ -27,11 +27,18 @@ type
       IPKey               = 'ip';
       PortKey             = 'port';
 
+      FilesKey            = 'files';
+      FlagsKey            = 'flags';
+      MinRespinseIntervalKey = 'min_request_interval';
+      NameKey             = 'name';
+
       PeerIDLen           = 20;
   private
     FScrapeURL: string;
     FPeerID: TUniString;
     function ConvertScrapeURL(const AURL: string): string; inline;
+
+    procedure HTTPRequest(ACallback: TProc<TIdHTTP>);
 
     function ParseAnnounceResponse(ALen: Integer; AValue: IBencodedValue): Boolean;
     function ParseScrapeResponse(ALen: Integer; AValue: IBencodedValue): Boolean;
@@ -74,13 +81,12 @@ end;
 
 procedure THTTPTracker.DoAnnounce;
 var
-  http: TIdHTTP;
   sb: TStringBuilder;
   ms: TMemoryStream;
 begin
   try
-    http := TIdHTTP.Create(nil);
-    try
+    HTTPRequest(procedure (AHTTP: TIdHTTP)
+    begin
       sb := TStringBuilder.Create(FTrackerURL);
       try
         // урл может содержать в себе параметр (.../ann.php?uk=blablabla)
@@ -100,7 +106,7 @@ begin
 
         ms := TMemoryStream.Create;
         try
-          http.Get(sb.ToString, ms);
+          AHTTP.Get(sb.ToString, ms);
 
           BencodeParse(ms, False, ParseAnnounceResponse);
         finally
@@ -109,9 +115,7 @@ begin
       finally
         sb.Free;
       end;
-    finally
-      http.Free;
-    end;
+    end);
   except
     FAnnounceInterval := 60;
   end;
@@ -120,8 +124,54 @@ begin
 end;
 
 procedure THTTPTracker.DoRetrack;
+var
+  sb: TStringBuilder;
+  ms: TMemoryStream;
 begin
+  if not FScrapeURL.IsEmpty then
+  try
+    HTTPRequest(procedure (AHTTP: TIdHTTP)
+    begin
+      sb := TStringBuilder.Create(FScrapeURL);
+      try
+        // урл может содержать в себе параметр (.../scrape.php?uk=blablabla)
+        sb.Append(System.StrUtils.IfThen(FTrackerURL.Contains('?'), '&', '?'))
+          .Append('info_hash='  ).Append(TIdURI.ParamsEncode(FInfoHash, IndyTextEncoding_8Bit));
+
+        ms := TMemoryStream.Create;
+        try
+          AHTTP.Get(sb.ToString, ms);
+
+          BencodeParse(ms, False, ParseScrapeResponse);
+        finally
+          ms.Free;
+        end;
+      finally
+        sb.Free;
+      end;
+    end);
+  except
+  end;
+
   inherited DoRetrack;
+end;
+
+procedure THTTPTracker.HTTPRequest(ACallback: TProc<TIdHTTP>);
+var
+  http: TIdHTTP;
+begin
+  Assert(Assigned(ACallback));
+
+  try
+    http := TIdHTTP.Create(nil);
+    try
+      ACallback(http);
+    finally
+      http.Free;
+    end;
+  except
+    FAnnounceInterval := 60;
+  end;
 end;
 
 function THTTPTracker.ParseAnnounceResponse(ALen: Integer;
@@ -205,7 +255,77 @@ end;
 
 function THTTPTracker.ParseScrapeResponse(ALen: Integer;
   AValue: IBencodedValue): Boolean;
+
+  procedure ParseFiles(AFilesDict: IBencodedDictionary);
+  begin
+    Assert(AFilesDict.ContainsKey(FInfoHash) and Supports(AFilesDict[FInfoHash], IBencodedDictionary));
+
+    with AFilesDict[FInfoHash] as IBencodedDictionary do
+    begin
+      if ContainsKey(CompleteKey) then
+      begin
+        Assert(Supports(Items[CompleteKey], IBencodedInteger));
+        {}
+      end;
+
+      if ContainsKey(DownloadedKey) then
+      begin
+        Assert(Supports(Items[DownloadedKey], IBencodedInteger));
+        {}
+      end;
+
+      if ContainsKey(IncompleteKey) then
+      begin
+        Assert(Supports(Items[IncompleteKey], IBencodedInteger));
+        {}
+      end;
+
+//      optional
+//      if ContainsKey(NameKey) then
+//      begin
+//        Assert(Assert(Items[NameKey], IBencodedString));
+//        {}
+//      end;
+    end;
+  end;
+
+  procedure ParseFlags(AFlagsDict: IBencodedDictionary);
+  begin
+    if AFlagsDict.ContainsKey(MinRespinseIntervalKey) then
+    begin
+      Assert(Supports(AFlagsDict[MinRespinseIntervalKey], IBencodedInteger));
+      FRetrackInterval := (AFlagsDict[MinRespinseIntervalKey] as IBencodedInteger).Value;
+    end;
+  end;
+
 begin
+  (*
+    Single Request
+    Request:
+    http://tracker/scrape?hash_id=xxxxxxxxxxxxxxxxxxxx
+
+    Reply:
+    d5:filesd20:xxxxxxxxxxxxxxxxxxxxd8:completei2e10:downloadedi0e10:incompletei4e
+    4:name12:xxxxxxxxxxxxee5:flagsd20:min_request_intervali3600eee
+
+    This tells us that torrent with hash 'xxxxxxxxxxxxxxxxxxxx' has 2 seeders, and 4 leechers. The torrent has been downloaded 0 times, and its name is xxxxxxxxxxxx. A scrape will not occur until at least 3600 seconds, or 60 minutes.
+  *)
+  Assert(Supports(AValue, IBencodedDictionary));
+
+  { parse "files" dict }
+  Assert((AValue as IBencodedDictionary).ContainsKey(FilesKey) and
+    Supports((AValue as IBencodedDictionary)[FilesKey], IBencodedDictionary));
+
+  ParseFiles((AValue as IBencodedDictionary)[FilesKey] as IBencodedDictionary);
+
+  { parse "flags" dict }
+  if (AValue as IBencodedDictionary).ContainsKey(FlagsKey) then
+  begin
+    Assert(Supports((AValue as IBencodedDictionary)[FlagsKey], IBencodedDictionary));
+
+    ParseFlags((AValue as IBencodedDictionary)[FlagsKey] as IBencodedDictionary);
+  end;
+
   Result := False;
 end;
 
