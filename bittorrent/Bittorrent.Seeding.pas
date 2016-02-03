@@ -777,7 +777,6 @@ procedure TSeeding.OnPeerDisconnect(APeer: IPeer);
 begin
   Lock;
   try
-    FPeersHave := FPeersHave - APeer.Bitfield;
     RemovePeer(APeer);
   finally
     Unlock;
@@ -1106,6 +1105,10 @@ procedure TSeeding.RemovePeer(APeer: IPeer);
 begin
   Lock;
   try
+    { вычитаем маску пира }
+    if APeer.Bitfield.CheckedCount > 0 then
+      FPeersHave := FPeersHave - APeer.Bitfield;
+
     FDownloadQueue.CancelRequests(APeer);
     FUploadQueue.CancelRequests(APeer);
 
