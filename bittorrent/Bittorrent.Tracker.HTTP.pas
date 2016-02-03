@@ -68,7 +68,7 @@ begin
   i := AURL.LastIndexOf('/');
   s := System.StrUtils.IfThen(i + 9 <= AURL.Length, AURL.Substring(i + 1, 8));
   if s.ToLower = 'announce' then
-    Result := AURL.Substring(1, i) + 'scrape' + AURL.Substring(i + 9, AURL.Length - i - 9)
+    Result := AURL.Substring(0, i) + 'scrape' + AURL.Substring(i + 9, AURL.Length - i - 9)
   else
     Result := string.Empty;
 end;
