@@ -343,44 +343,42 @@ begin
     end else
       pos := 0;
 
-    try
-      len := calcRequireSize;
+    len := calcRequireSize;
 
-      { надо блокировать воспроизведение, если впереди данные недоступны }
+    { надо блокировать воспроизведение, если впереди данные недоступны }
 
-      while Assigned(FFileItem) and (
-              not FileExists(FFileItem.Path) or { доп. проверка. файл создается только тогда, когда в него хотя бы 1 кусок записан }
-              not FFileItem.IsLoaded(pos, Min(len, Int64(ALen)))) do
-      begin
-        { показываем крутяшку }
-        if frmOverlay.Overlay <> otLoading then
-          TThread.Synchronize(nil, procedure
-          begin
-            frmOverlay.Overlay := otLoading;
-          end);
-
-        FFileItem.Require(pos, len);
-
-        Sleep(10);
-      end;
-
-      if Assigned(FFileItem) and TFile.Exists(FFileItem.Path) then
-      begin
-        if not Assigned(FFileStream) then
-          FFileStream := TFileStream.Create(FFileItem.Path, fmOpenRead or fmShareDenyNone);
-
-        with FFileStream do
-          Result := Read(ABuf^, Min(Int64(ALen), Size - Position));
-      end else
-        Result := 0;
-    finally
-      { прячем крутяшку }
-      if frmOverlay.Overlay <> otNone then
+    while Assigned(FFileItem) and (
+            not FileExists(FFileItem.Path) or { доп. проверка. файл создается только тогда, когда в него хотя бы 1 кусок записан }
+            not FFileItem.IsLoaded(pos, Min(len, Int64(ALen)))) do
+    begin
+      { показываем крутяшку }
+      if frmOverlay.Overlay <> otLoading then
         TThread.Synchronize(nil, procedure
         begin
-          frmOverlay.Overlay := otNone;
+          frmOverlay.Overlay := otLoading;
         end);
+
+      FFileItem.Require(pos, len);
+
+      Sleep(10);
     end;
+
+    if Assigned(FFileItem) and TFile.Exists(FFileItem.Path) then
+    begin
+      if not Assigned(FFileStream) then
+        FFileStream := TFileStream.Create(FFileItem.Path, fmOpenRead or fmShareDenyNone);
+
+      with FFileStream do
+        Result := Read(ABuf^, Min(Int64(ALen), Size - Position));
+    end else
+
+      Result := 0;
+    { прячем крутяшку }
+    if frmOverlay.Overlay <> otNone then
+      TThread.Synchronize(nil, procedure
+      begin
+        frmOverlay.Overlay := otNone;
+      end);
   end;
 end;
 
