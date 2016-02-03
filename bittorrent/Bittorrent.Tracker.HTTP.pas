@@ -36,6 +36,11 @@ type
   private
     FScrapeURL: string;
     FPeerID: TUniString;
+
+    FCompleted: Integer;
+    FDownloaded: Integer;
+    FIncompleted: Integer;
+
     function ConvertScrapeURL(const AURL: string): string; inline;
 
     procedure HTTPRequest(ACallback: TProc<TIdHTTP>);
@@ -262,23 +267,16 @@ function THTTPTracker.ParseScrapeResponse(ALen: Integer;
 
     with AFilesDict[FInfoHash] as IBencodedDictionary do
     begin
-      if ContainsKey(CompleteKey) then
-      begin
-        Assert(Supports(Items[CompleteKey], IBencodedInteger));
-        {}
-      end;
+      Assert(ContainsKey(CompleteKey) and ContainsKey(DownloadedKey) and ContainsKey(IncompleteKey));
 
-      if ContainsKey(DownloadedKey) then
-      begin
-        Assert(Supports(Items[DownloadedKey], IBencodedInteger));
-        {}
-      end;
+      Assert(Supports(Items[CompleteKey], IBencodedInteger));
+      FCompleted := (Items[CompleteKey] as IBencodedInteger).Value;
 
-      if ContainsKey(IncompleteKey) then
-      begin
-        Assert(Supports(Items[IncompleteKey], IBencodedInteger));
-        {}
-      end;
+      Assert(Supports(Items[DownloadedKey], IBencodedInteger));
+      FDownloaded := (Items[DownloadedKey] as IBencodedInteger).Value;
+
+      Assert(Supports(Items[IncompleteKey], IBencodedInteger));
+      FIncompleted := (Items[IncompleteKey] as IBencodedInteger).Value;
 
 //      optional
 //      if ContainsKey(NameKey) then
