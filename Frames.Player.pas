@@ -346,6 +346,8 @@ begin
     try
       len := calcRequireSize;
 
+      { надо блокировать воспроизведение, если впереди данные недоступны }
+
       while Assigned(FFileItem) and (
               not FileExists(FFileItem.Path) or { доп. проверка. файл создается только тогда, когда в него хотя бы 1 кусок записан }
               not FFileItem.IsLoaded(pos, Min(len, Int64(ALen)))) do
@@ -357,14 +359,9 @@ begin
             frmOverlay.Overlay := otLoading;
           end);
 
-        { проверяем, дёргает ли юзет трекбар }
-        if FMouseDroped then
-        begin
-          FFileItem.Require(pos, len);
+        FFileItem.Require(pos, len);
 
-          Sleep(10);
-        end else
-          Exit(0); { да, скроллит }
+        Sleep(10);
       end;
 
       if Assigned(FFileItem) and TFile.Exists(FFileItem.Path) then
@@ -765,7 +762,7 @@ begin
   FLaslUpdate   := MinDateTime;
   FLock        := TObject.Create;
   FPlaying     := False;
-  FMouseDroped := False;
+  FMouseDroped := True;
   FFileStream  := nil;
   FPlayer      := nil;
 
