@@ -33,7 +33,7 @@ begin
   begin
     FOverlay := Value;
 
-    Visible               := FOverlay <> FOverlay;
+    Visible               := FOverlay <> otNone;
     panelOverlay.Visible  := FOverlay = otOverlay;
     aniIndicator.Visible  := FOverlay = otLoading;
   end;
