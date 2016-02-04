@@ -588,7 +588,7 @@ begin
             10),
           20),
         30, FItems),
-      1
+      40
     );
 
     FFileSystem     := TFileSystem.Create(AMetafile, FDownloadPath);
