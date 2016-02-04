@@ -953,6 +953,8 @@ begin
       FPiecesBuf.Add(APieceIndex, p);
     end;
 
+    FDownloadQueue.Dequeue(APieceIndex, AOffset, AData.Len); { выбрасываем из буфера закачек }
+
     if p.Completed then
     try
       try
@@ -985,8 +987,6 @@ begin
       end;
 
       FBitField[APieceIndex] := True; { делаем отметку, что кусок загружен }
-
-      FDownloadQueue.Dequeue(APieceIndex); { выбрасываем из буфера закачек }
 
       for it in FPeers do
       begin
