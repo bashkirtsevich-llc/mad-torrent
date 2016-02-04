@@ -18,7 +18,8 @@ type
     FBlocks: TDictionary<Integer, TUniString>; { список блоков (каждый по 16кб) }
 
     function GetCompleted: Boolean;
-    procedure AddBlock(AOffset: Integer; const AData: TUniString);
+    function ContainsBlock(AOffset: Integer): Boolean; inline;
+    procedure AddBlock(AOffset: Integer; const AData: TUniString); inline;
     function GetData: TUniString;
     function GetPieceLength: Integer; inline;
     function GetIndex: Integer; inline;
@@ -38,8 +39,13 @@ implementation
 
 procedure TPiece.AddBlock(AOffset: Integer; const AData: TUniString);
 begin
-  if not FBlocks.ContainsKey(AOffset) then
+  if not ContainsBlock(AOffset) then
     FBlocks.Add(AOffset, AData.Copy);
+end;
+
+function TPiece.ContainsBlock(AOffset: Integer): Boolean;
+begin
+  Result := FBlocks.ContainsKey(AOffset);
 end;
 
 constructor TPiece.Create(AIndex, APieceLength, AOffset: Integer;
