@@ -1418,7 +1418,10 @@ begin
         TPiece.EnumBlocks(FMetafile.PieceLength[idx],
           procedure (AOffset, ALength: Integer)
           begin
-            if not FEndGame and FDownloadQueue.CanEnqueue(idx, AOffset, ALength) then
+            if FEndGame then
+              APeer.Request(idx, AOffset, ALength)
+            else
+            if FDownloadQueue.CanEnqueue(idx, AOffset, ALength) then
             begin
               FDownloadQueue.Enqueue(idx, AOffset, ALength, APeer);
               APeer.Request(idx, AOffset, ALength);
