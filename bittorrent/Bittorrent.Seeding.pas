@@ -36,6 +36,7 @@ type
       ['{21E227E7-EDCF-4CB0-9F4E-4E2861E39E85}']
         function CanEnqueue(APeer: IPeer = nil): Boolean; overload;
         function CanEnqueue(APiece, AOffset, ASize: Integer): Boolean; overload;
+        function CanEnqueue(APeer: IPeer; APiece, AOffset, ASize: Integer): Boolean; overload;
         procedure Enqueue(APiece, AOffset, ASize: Integer; APeer: IPeer); { поставить в очередь }
         procedure Dequeue(APiece, AOffset, ASize: Integer);
         procedure Timeout; { выбросить всё ненужное по таймауту }
@@ -81,6 +82,7 @@ type
 
         function CanEnqueue(APeer: IPeer = nil): Boolean; overload;
         function CanEnqueue(APiece, AOffset, ASize: Integer): Boolean; overload;
+        function CanEnqueue(APeer: IPeer; APiece, AOffset, ASize: Integer): Boolean; overload; inline;
         procedure Enqueue(APiece, AOffset, ASize: Integer; APeer: IPeer); inline;
         procedure Dequeue(APiece, AOffset, ASize: Integer); inline;
         procedure Timeout;
@@ -1410,7 +1412,7 @@ begin
             if FEndGame then
               APeer.Request(idx, AOffset, ALength)
             else
-            if FDownloadQueue.CanEnqueue(idx, AOffset, ALength) then
+            if FDownloadQueue.CanEnqueue(APeer, idx, AOffset, ALength) then
             begin
               FDownloadQueue.Enqueue(idx, AOffset, ALength, APeer);
               APeer.Request(idx, AOffset, ALength);
@@ -1522,6 +1524,12 @@ begin
       if Assigned(FOnCancel) then
         FOnCancel(key[dkiPiece], key[dkiOffset], APeer);
     end;
+end;
+
+function TSeeding.TDownloadPieceQueue.CanEnqueue(APeer: IPeer; APiece, AOffset,
+  ASize: Integer): Boolean;
+begin
+  Result := CanEnqueue(APeer) and CanEnqueue(APiece, AOffset, ASize);
 end;
 
 function TSeeding.TDownloadPieceQueue.CanEnqueue(APiece, AOffset,
