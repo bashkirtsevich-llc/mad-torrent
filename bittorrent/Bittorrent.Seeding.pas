@@ -34,15 +34,11 @@ type
 
       IDownloadPieceQueue = interface(IPieceQueue)
       ['{21E227E7-EDCF-4CB0-9F4E-4E2861E39E85}']
-        function GetAsBitfield: TBitField;
-
         function CanEnqueue(APeer: IPeer = nil): Boolean; overload;
         function CanEnqueue(APiece, AOffset, ASize: Integer): Boolean; overload;
         procedure Enqueue(APiece, AOffset, ASize: Integer; APeer: IPeer); { поставить в очередь }
         procedure Dequeue(APiece, AOffset, ASize: Integer);
         procedure Timeout; { выбросить всё ненужное по таймауту }
-
-        property AsBitfield: TBitField read GetAsBitfield;
       end;
 
       IUploadPieceQueue = interface(IPieceQueue)
@@ -77,18 +73,16 @@ type
           TDownloadKeyItem = (dkiPiece, dkiOffset, dkiSize);
           TDownloadKey = array[TDownloadKeyItem] of Integer;
       private
-        FBitField: TBitField;
         FItems: TDictionary<TDownloadKey, TDownloadPieceQueueItem>;
         FOnTimeout: TProc<Integer, Integer, IPeer>;
         FOnCancel: TProc<Integer, Integer, IPeer>;
 
         function CreateKey(APiece, AOffset, ASize: Integer): TDownloadKey; inline;
 
-        function GetAsBitfield: TBitField; inline;
         function CanEnqueue(APeer: IPeer = nil): Boolean; overload;
         function CanEnqueue(APiece, AOffset, ASize: Integer): Boolean; overload;
         procedure Enqueue(APiece, AOffset, ASize: Integer; APeer: IPeer); inline;
-        procedure Dequeue(APiece, AOffset, ASize: Integer);
+        procedure Dequeue(APiece, AOffset, ASize: Integer); inline;
         procedure Timeout;
       protected
         procedure CancelRequests(APeer: IPeer); override;
@@ -558,7 +552,7 @@ function TSeeding.GetWant: TBitField;
 begin
   Lock;
   try
-    Result := (not FBitField) and (not FDownloadQueue.AsBitfield);
+    Result := (not FBitField) {and (not FDownloadQueue.AsBitfield)};
     Assert(Result.Len = FBitField.Len);
   finally
     Unlock;
@@ -1475,7 +1469,6 @@ begin
       end
     )
   );
-  FBitField   := TBitfield.Create(APieceCount);
   FOnTimeout  := AOnTimeout;
   FOnCancel   := AOnCancel;
 end;
@@ -1491,7 +1484,6 @@ end;
 procedure TSeeding.TDownloadPieceQueue.Dequeue(APiece, AOffset, ASize: Integer);
 begin
   FItems.Remove(CreateKey(APiece, AOffset, ASize));
-  FBitField[APiece] := False;
 end;
 
 destructor TSeeding.TDownloadPieceQueue.Destroy;
@@ -1504,12 +1496,6 @@ procedure TSeeding.TDownloadPieceQueue.Enqueue(APiece, AOffset, ASize: Integer; 
 begin
   FItems.Add(CreateKey(APiece, AOffset, ASize),
     TDownloadPieceQueueItem.Create(APeer));
-  FBitField[APiece] := True;
-end;
-
-function TSeeding.TDownloadPieceQueue.GetAsBitfield: TBitField;
-begin
-  Result := FBitField;
 end;
 
 procedure TSeeding.TDownloadPieceQueue.CancelRequest(APeer: IPeer; APieceIndex,
@@ -1523,8 +1509,6 @@ begin
   for key in keys do
     if key[dkiPiece] = APieceIndex then
       FItems.Remove(key);
-
-  FBitField[APieceIndex] := False;
 end;
 
 procedure TSeeding.TDownloadPieceQueue.CancelRequests(APeer: IPeer);
@@ -1582,7 +1566,6 @@ begin
       if Assigned(FOnTimeout) then
         FOnTimeout(key[dkiPiece], key[dkiOffset], FItems[key].Peer);
     finally
-      FBitField[key[dkiPiece]] := False;
       FItems.Remove(key);
     end;
 end;
