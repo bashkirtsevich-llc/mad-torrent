@@ -25,6 +25,7 @@ type
       MaxPieceRequestCount = 8;   { на сколько запросов мы можем ответить за проход }
       CacheClearInterval   = 5;   { секунд }
       DefaultBlackListTime = 10;  { минут }
+      EndGameThreshold     = 20;  { порог включения endgame-режима }
     type
       IPieceQueue = interface
       ['{2A153346-D39E-48CE-9D84-7FFD5186C83A}']
@@ -1287,7 +1288,7 @@ begin
         { соединение (хендшейк пройден) установлено успешно и у нас есть метаданные }
         if peer.ConnectionEstablished and haveMD then { мы чето качаем }
         begin
-          FEndGame := weLoad and want.AllFalse and not FBitField.AllTrue;
+          FEndGame := weLoad and (FBitField.CheckedCount < EndGameThreshold);
 
           if weLoad and (peer.Bitfield.Len > 0) and (FEndGame or
             not TBitField(want and peer.Bitfield).AllFalse) then
