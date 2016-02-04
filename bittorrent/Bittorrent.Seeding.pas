@@ -38,7 +38,8 @@ type
         function CanEnqueue(APiece, AOffset, ASize: Integer): Boolean; overload;
         function CanEnqueue(APiece, AOffset, ASize: Integer; APeer: IPeer): Boolean; overload;
         procedure Enqueue(APiece, AOffset, ASize: Integer; APeer: IPeer); { поставить в очередь }
-        procedure Dequeue(APiece, AOffset, ASize: Integer);
+        procedure Dequeue(APiece, AOffset, ASize: Integer); overload;
+        procedure Dequeue(APiece: Integer); overload;
         procedure Timeout; { выбросить всё ненужное по таймауту }
       end;
 
@@ -84,7 +85,8 @@ type
         function CanEnqueue(APiece, AOffset, ASize: Integer): Boolean; overload;
         function CanEnqueue(APiece, AOffset, ASize: Integer; APeer: IPeer): Boolean; overload; inline;
         procedure Enqueue(APiece, AOffset, ASize: Integer; APeer: IPeer); inline;
-        procedure Dequeue(APiece, AOffset, ASize: Integer); inline;
+        procedure Dequeue(APiece, AOffset, ASize: Integer); overload; inline;
+        procedure Dequeue(APiece: Integer); overload;
         procedure Timeout;
       protected
         procedure CancelRequests(APeer: IPeer); override;
@@ -940,8 +942,6 @@ begin
       Exit;
     end;
 
-    FDownloadQueue.Dequeue(APieceIndex, AOffset, AData.Len); { выбрасываем из буфера закачек }
-
     if FPiecesBuf.ContainsKey(APieceIndex) then
     begin
       p := FPiecesBuf[APieceIndex];
@@ -985,6 +985,8 @@ begin
       end;
 
       FBitField[APieceIndex] := True; { делаем отметку, что кусок загружен }
+
+      FDownloadQueue.Dequeue(APieceIndex); { выбрасываем из буфера закачек }
 
       for it in FPeers do
       begin
@@ -1411,8 +1413,9 @@ begin
           begin
             if FEndGame then
               APeer.Request(idx, AOffset, ALength)
-            else
-            if FDownloadQueue.CanEnqueue(idx, AOffset, ALength, APeer) then
+            else { проверяем, загружен ли текущий блок или его можно запросить с кого-либо }
+            if not (FPiecesBuf.ContainsKey(idx) and FPiecesBuf[idx].ContainsBlock(AOffset)) and
+                FDownloadQueue.CanEnqueue(idx, AOffset, ALength, APeer) then
             begin
               FDownloadQueue.Enqueue(idx, AOffset, ALength, APeer);
               APeer.Request(idx, AOffset, ALength);
@@ -1482,6 +1485,18 @@ end;
 procedure TSeeding.TDownloadPieceQueue.Dequeue(APiece, AOffset, ASize: Integer);
 begin
   FItems.Remove(CreateKey(APiece, AOffset, ASize));
+end;
+
+procedure TSeeding.TDownloadPieceQueue.Dequeue(APiece: Integer);
+var
+  keys: TArray<TDownloadKey>;
+  key: TDownloadKey;
+begin
+  keys := FItems.Keys.ToArray;
+
+  for key in keys do
+    if key[dkiPiece] = APiece then
+      FItems.Remove(key);
 end;
 
 destructor TSeeding.TDownloadPieceQueue.Destroy;
