@@ -552,7 +552,7 @@ function TSeeding.GetWant: TBitField;
 begin
   Lock;
   try
-    Result := (not FBitField) {and (not FDownloadQueue.AsBitfield)};
+    Result := not FBitField;
     Assert(Result.Len = FBitField.Len);
   finally
     Unlock;
