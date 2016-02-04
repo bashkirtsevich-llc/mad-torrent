@@ -40,7 +40,6 @@ type
         function CanEnqueue(APiece, AOffset, ASize: Integer): Boolean; overload;
         procedure Enqueue(APiece, AOffset, ASize: Integer; APeer: IPeer); { поставить в очередь }
         procedure Dequeue(APiece, AOffset, ASize: Integer);
-        procedure Touch(APiece: Integer); deprecated; { пир прислал часть куска, обновить время }
         procedure Timeout; { выбросить всё ненужное по таймауту }
 
         property AsBitfield: TBitField read GetAsBitfield;
@@ -90,7 +89,6 @@ type
         function CanEnqueue(APiece, AOffset, ASize: Integer): Boolean; overload;
         procedure Enqueue(APiece, AOffset, ASize: Integer; APeer: IPeer); inline;
         procedure Dequeue(APiece, AOffset, ASize: Integer);
-        procedure Touch(APiece: Integer); deprecated;
         procedure Timeout;
       protected
         procedure CancelRequests(APeer: IPeer); override;
@@ -1587,13 +1585,6 @@ begin
       FBitField[key[dkiPiece]] := False;
       FItems.Remove(key);
     end;
-end;
-
-procedure TSeeding.TDownloadPieceQueue.Touch(APiece: Integer);
-begin
-  {if FItems.ContainsKey(APiece) then
-    with FItems[APiece] do
-      FItems.AddOrSetValue(APiece, TDownloadPieceQueueItem.Create(Peer));}
 end;
 
 { TSeeding.TDownloadPieceQueue.TDownloadPieceQueue }
