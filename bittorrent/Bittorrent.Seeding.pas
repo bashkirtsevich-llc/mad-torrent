@@ -1404,10 +1404,6 @@ begin
             Continue;
         end;
 
-        {$IFDEF DEBUG}
-        DebugOutput('fetch ' + idx.ToString);
-        {$ENDIF}
-
         TPiece.EnumBlocks(FMetafile.PieceLength[idx],
           procedure (AOffset, ALength: Integer)
           begin
@@ -1418,6 +1414,10 @@ begin
             begin
               FDownloadQueue.Enqueue(idx, AOffset, ALength, APeer);
               APeer.Request(idx, AOffset, ALength);
+
+              {$IFDEF DEBUG}
+              DebugOutput(Format('fetch %d (%d/%d) from %s', [idx, AOffset, ALength, APeer.Host]));
+              {$ENDIF}
             end;
           end);
       end;
