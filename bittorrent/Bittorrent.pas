@@ -509,8 +509,8 @@ type
     function GetPieceLength: Integer;
     function GetIndex: Integer;
 
+    function ContainsBlock(AOffset: Integer): Boolean;
     procedure AddBlock(AOffset: Integer; const AData: TUniString);
-
     procedure EnumBlocks(ACallBack: TProc<Integer, Integer>);
 
     property Completed: Boolean read GetCompleted;

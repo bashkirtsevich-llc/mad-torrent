@@ -18,13 +18,14 @@ type
     const
       MinPeerRate          = -100;{ минимальный рейтинг, после которого блокируем отдачу пиру }
       MaxIdleTime          = 5*60*1000; { 5 минут }
-      MaxPieceQueueSize    = 2048;{ максимальное кол-во запросов }
+      MaxBlocksQueueSize   = 20480;{ максимальное кол-во запрашиваемых блоков }
       { это значение необходимо рассчитывать, т.к. размер куска может быть разным (32 куска по 32 кб = 1 мегабайт) }
-      MaxPeerPiecesCount   = 1;   { максимальное кол-во кусков, запрашиваемых с одного пира за раз }
+      MaxPeerBlocksCount   = 1;   { максимальное кол-во блоков, запрашиваемых с одного пира за раз }
       MaxPieceQueueTimeout = 60;  { секунд (тоже зависит от скорости) }
       MaxPieceRequestCount = 8;   { на сколько запросов мы можем ответить за проход }
       CacheClearInterval   = 5;   { секунд }
       DefaultBlackListTime = 10;  { минут }
+      EndGameThreshold     = 20;  { порог включения endgame-режима }
     type
       IPieceQueue = interface
       ['{2A153346-D39E-48CE-9D84-7FFD5186C83A}']
@@ -34,15 +35,13 @@ type
 
       IDownloadPieceQueue = interface(IPieceQueue)
       ['{21E227E7-EDCF-4CB0-9F4E-4E2861E39E85}']
-        function GetAsBitfield: TBitField;
-
-        function CanEnqueue(APeer: IPeer = nil): Boolean;
-        procedure Enqueue(APiece: Integer; APeer: IPeer); { поставить в очередь }
-        procedure Dequeue(APiece: Integer);
-        procedure Touch(APiece: Integer); { пир прислал часть куска, обновить время }
+        function CanEnqueue(APeer: IPeer = nil): Boolean; overload;
+        function CanEnqueue(APiece, AOffset, ASize: Integer): Boolean; overload;
+        function CanEnqueue(APiece, AOffset, ASize: Integer; APeer: IPeer): Boolean; overload;
+        procedure Enqueue(APiece, AOffset, ASize: Integer; APeer: IPeer); { поставить в очередь }
+        procedure Dequeue(APiece, AOffset, ASize: Integer); overload;
+        procedure Dequeue(APiece: Integer); overload;
         procedure Timeout; { выбросить всё ненужное по таймауту }
-
-        property AsBitfield: TBitField read GetAsBitfield;
       end;
 
       IUploadPieceQueue = interface(IPieceQueue)
@@ -73,24 +72,29 @@ type
 
             constructor Create(APeer: IPeer);
           end;
-      private
-        FBitField: TBitField;
-        FItems: TDictionary<Integer, TDownloadPieceQueueItem>;
-        FOnTimeout: TProc<Integer, IPeer>;
-        FOnCancel: TProc<Integer, IPeer>;
 
-        function GetAsBitfield: TBitField; inline;
-        function CanEnqueue(APeer: IPeer = nil): Boolean;
-        procedure Enqueue(APiece: Integer; APeer: IPeer); inline;
-        procedure Dequeue(APiece: Integer);
-        procedure Touch(APiece: Integer);
+          TDownloadKeyItem = (dkiPiece, dkiOffset, dkiSize);
+          TDownloadKey = array[TDownloadKeyItem] of Integer;
+      private
+        FItems: TDictionary<TDownloadKey, TDownloadPieceQueueItem>;
+        FOnTimeout: TProc<Integer, Integer, IPeer>;
+        FOnCancel: TProc<Integer, Integer, IPeer>;
+
+        function CreateKey(APiece, AOffset, ASize: Integer): TDownloadKey; inline;
+
+        function CanEnqueue(APeer: IPeer = nil): Boolean; overload;
+        function CanEnqueue(APiece, AOffset, ASize: Integer): Boolean; overload;
+        function CanEnqueue(APiece, AOffset, ASize: Integer; APeer: IPeer): Boolean; overload; inline;
+        procedure Enqueue(APiece, AOffset, ASize: Integer; APeer: IPeer); inline;
+        procedure Dequeue(APiece, AOffset, ASize: Integer); overload; inline;
+        procedure Dequeue(APiece: Integer); overload;
         procedure Timeout;
       protected
         procedure CancelRequests(APeer: IPeer); override;
         procedure CancelRequest(APeer: IPeer; APieceIndex, AOffset: Integer); override;
       public
         constructor Create(APieceCount: Integer; AOnTimeout,
-          AOnCancel: TProc<Integer, IPeer>);
+          AOnCancel: TProc<Integer, Integer, IPeer>);
         destructor Destroy; override;
       end;
 
@@ -198,7 +202,7 @@ type
     procedure AddTracker(ATracker: ITracker);
     procedure RemovePeer(APeer: IPeer); inline;
 
-    procedure CancelReuests(APiece: Integer; APeer: IPeer);
+    procedure CancelReuests(APiece, AOffset: Integer; APeer: IPeer);
 
     procedure Touch; inline;
     procedure CancelDownloading;
@@ -553,7 +557,7 @@ function TSeeding.GetWant: TBitField;
 begin
   Lock;
   try
-    Result := (not FBitField) and (not FDownloadQueue.AsBitfield);
+    Result := not FBitField;
     Assert(Result.Len = FBitField.Len);
   finally
     Unlock;
@@ -584,7 +588,7 @@ begin
             10),
           20),
         30, FItems),
-      1
+      40
     );
 
     FFileSystem     := TFileSystem.Create(AMetafile, FDownloadPath);
@@ -950,6 +954,8 @@ begin
       FPiecesBuf.Add(APieceIndex, p);
     end;
 
+    FDownloadQueue.Dequeue(APieceIndex, AOffset, AData.Len); { выбрасываем из буфера закачек }
+
     if p.Completed then
     try
       try
@@ -981,10 +987,7 @@ begin
         end;
       end;
 
-      //DebugOutput('Получил ' + APieceIndex.ToString);
-
       FBitField[APieceIndex] := True; { делаем отметку, что кусок загружен }
-      FDownloadQueue.Dequeue(APieceIndex); { выбрасываем из буфера закачек }
 
       for it in FPeers do
       begin
@@ -1016,8 +1019,7 @@ begin
         FetchNext(APeer);
     finally
       Update;
-    end else
-      FDownloadQueue.Touch(APieceIndex); { продлеваем жизнь запрашиваемому куску }
+    end;
   finally
     Unlock;
   end;
@@ -1076,17 +1078,13 @@ begin
   end;
 end;
 
-procedure TSeeding.CancelReuests(APiece: Integer; APeer: IPeer);
+procedure TSeeding.CancelReuests(APiece, AOffset: Integer; APeer: IPeer);
 begin
   {$IFDEF DEBUG}
   DebugOutput('отмена запрошенного куска ' + APiece.ToString);
   {$ENDIF}
 
-  TPiece.EnumBlocks(FMetafile.PieceLength[APiece],
-    procedure (AOffset, ALength: Integer)
-    begin
-      APeer.Cancel(APiece, AOffset);
-    end);
+  APeer.Cancel(APiece, AOffset);
 end;
 
 procedure TSeeding.CheckBlackList;
@@ -1290,7 +1288,7 @@ begin
         { соединение (хендшейк пройден) установлено успешно и у нас есть метаданные }
         if peer.ConnectionEstablished and haveMD then { мы чето качаем }
         begin
-          FEndGame := weLoad and want.AllFalse and not FBitField.AllTrue;
+          FEndGame := weLoad and (FBitField.CheckedCount < EndGameThreshold);
 
           if weLoad and (peer.Bitfield.Len > 0) and (FEndGame or
             not TBitField(want and peer.Bitfield).AllFalse) then
@@ -1391,19 +1389,13 @@ end;
 procedure TSeeding.FetchNext(APeer: IPeer);
 var
   idx: Integer;
-  bf: TBitField;
   pcs: TArray<Integer>;
 begin
   Lock;
   try
     if ([pfTheyChoke] * APeer.Flags = []) and (FEndGame or FDownloadQueue.CanEnqueue(APeer)) then
     begin
-      if FEndGame then
-        bf := not FBitField
-      else
-        bf := GetWant;
-
-      for idx in FPiecePicker.Fetch(APeer.Bitfield, FPeersHave, bf) do
+      for idx in FPiecePicker.Fetch(APeer.Bitfield, FPeersHave, GetWant) do
       begin
         if FEndGame then
         begin
@@ -1415,17 +1407,24 @@ begin
             FEndGameList.AddOrSetValue(APeer, pcs);
           end else
             Continue;
-        end else
-          FDownloadQueue.Enqueue(idx, APeer);
-
-        {$IFDEF DEBUG}
-        DebugOutput('fetch ' + idx.ToString);
-        {$ENDIF}
+        end;
 
         TPiece.EnumBlocks(FMetafile.PieceLength[idx],
           procedure (AOffset, ALength: Integer)
           begin
-            APeer.Request(idx, AOffset, ALength);
+            if FEndGame then
+              APeer.Request(idx, AOffset, ALength)
+            else { проверяем, загружен ли текущий блок или его можно запросить с кого-либо }
+            if not (FPiecesBuf.ContainsKey(idx) and FPiecesBuf[idx].ContainsBlock(AOffset)) and
+                FDownloadQueue.CanEnqueue(idx, AOffset, ALength, APeer) then
+            begin
+              FDownloadQueue.Enqueue(idx, AOffset, ALength, APeer);
+              APeer.Request(idx, AOffset, ALength);
+
+              {$IFDEF DEBUG}
+              DebugOutput(Format('fetch %d (%d/%d) from %s', [idx, AOffset, ALength, APeer.Host]));
+              {$ENDIF}
+            end;
           end);
       end;
     end;
@@ -1456,20 +1455,49 @@ end;
 { TSeeding.TDownloadPieceQueue }
 
 constructor TSeeding.TDownloadPieceQueue.Create(APieceCount: Integer;
-  AOnTimeout, AOnCancel: TProc<Integer, IPeer>);
+  AOnTimeout, AOnCancel: TProc<Integer, Integer, IPeer>);
 begin
   inherited Create;
 
-  FItems      := TDictionary<Integer, TDownloadPieceQueueItem>.Create;
-  FBitField   := TBitfield.Create(APieceCount);
+  FItems      := TDictionary<TDownloadKey, TDownloadPieceQueueItem>.Create(
+    TDelegatedEqualityComparer<TDownloadKey>.Create(
+      function (const ALeft, ARight: TDownloadKey): Boolean
+      begin
+        Result := CompareMem(@ALeft[dkiPiece], @ARight[dkiPiece], SizeOf(TDownloadKey));
+      end,
+      function (const AValue: TDownloadKey): Integer
+      begin
+        Result := THashBobJenkins.GetHashValue(AValue[dkiPiece], SizeOf(TDownloadKey));
+      end
+    )
+  );
   FOnTimeout  := AOnTimeout;
   FOnCancel   := AOnCancel;
 end;
 
-procedure TSeeding.TDownloadPieceQueue.Dequeue(APiece: Integer);
+function TSeeding.TDownloadPieceQueue.CreateKey(APiece, AOffset,
+  ASize: Integer): TDownloadKey;
 begin
-  FItems.Remove(APiece);
-  FBitField[APiece] := False;
+  Result[dkiPiece]   := APiece;
+  Result[dkiOffset]  := AOffset;
+  Result[dkiSize]    := ASize;
+end;
+
+procedure TSeeding.TDownloadPieceQueue.Dequeue(APiece, AOffset, ASize: Integer);
+begin
+  FItems.Remove(CreateKey(APiece, AOffset, ASize));
+end;
+
+procedure TSeeding.TDownloadPieceQueue.Dequeue(APiece: Integer);
+var
+  keys: TArray<TDownloadKey>;
+  key: TDownloadKey;
+begin
+  keys := FItems.Keys.ToArray;
+
+  for key in keys do
+    if key[dkiPiece] = APiece then
+      FItems.Remove(key);
 end;
 
 destructor TSeeding.TDownloadPieceQueue.Destroy;
@@ -1478,84 +1506,88 @@ begin
   inherited;
 end;
 
-procedure TSeeding.TDownloadPieceQueue.Enqueue(APiece: Integer; APeer: IPeer);
+procedure TSeeding.TDownloadPieceQueue.Enqueue(APiece, AOffset, ASize: Integer; APeer: IPeer);
 begin
-  FItems.Add(APiece, TDownloadPieceQueueItem.Create(APeer));
-  FBitField[APiece] := True;
-end;
-
-function TSeeding.TDownloadPieceQueue.GetAsBitfield: TBitField;
-begin
-  Result := FBitField;
+  FItems.Add(CreateKey(APiece, AOffset, ASize),
+    TDownloadPieceQueueItem.Create(APeer));
 end;
 
 procedure TSeeding.TDownloadPieceQueue.CancelRequest(APeer: IPeer; APieceIndex,
   AOffset: Integer);
+var
+  key: TDownloadKey;
+  keys: TArray<TDownloadKey>;
 begin
-  FItems.Remove(APieceIndex);
-  FBitField[APieceIndex] := False;
+  keys := FItems.Keys.ToArray; // по идее, при таком использовании должны удаляться все элементы
+
+  for key in keys do
+    if key[dkiPiece] = APieceIndex then
+      FItems.Remove(key);
 end;
 
 procedure TSeeding.TDownloadPieceQueue.CancelRequests(APeer: IPeer);
 var
-  i: Integer;
+  key: TDownloadKey;
+  keys: TArray<TDownloadKey>;
 begin
-  for i in FItems.Keys do
-    if FItems[i].Peer.HashCode = APeer.HashCode then
+  keys := FItems.Keys.ToArray; // по идее, при таком использовании должны удаляться все элементы
+
+  for key in keys do
+    if FItems[key].Peer.HashCode = APeer.HashCode then
     begin
-      FItems.Remove(i);
+      FItems.Remove(key);
 
       if Assigned(FOnCancel) then
-        FOnCancel(i, APeer);
-
-      Break;
+        FOnCancel(key[dkiPiece], key[dkiOffset], APeer);
     end;
 end;
 
-function TSeeding.TDownloadPieceQueue.CanEnqueue(APeer: IPeer): Boolean;
-var
-  i, j: Integer;
+function TSeeding.TDownloadPieceQueue.CanEnqueue(APiece, AOffset, ASize: Integer;
+  APeer: IPeer): Boolean;
 begin
-  Result := FItems.Count < MaxPieceQueueSize;
+  Result := CanEnqueue(APeer) and CanEnqueue(APiece, AOffset, ASize);
+end;
 
-  if Result and Assigned(APeer) then
-  begin
-    j := 0;
+function TSeeding.TDownloadPieceQueue.CanEnqueue(APiece, AOffset,
+  ASize: Integer): Boolean;
+begin
+  Result := (FItems.Count < MaxBlocksQueueSize) and not FItems.ContainsKey(
+    CreateKey(APiece, AOffset, ASize)
+  );
+end;
 
-    for i in FItems.Keys do
-      if FItems[i].Peer.HashCode = APeer.HashCode then
-      begin
-        Inc(j);
-
-        if j >= MaxPeerPiecesCount then
-          Exit(False);
-      end;
-  end;
+function TSeeding.TDownloadPieceQueue.CanEnqueue(APeer: IPeer): Boolean;
+begin
+  Result := (FItems.Count < MaxBlocksQueueSize) and Assigned(APeer) and (
+    Length(
+      TPrelude.Filter<TDownloadKey>(FItems.Keys.ToArray,
+        function (AKey: TDownloadKey): Boolean
+        begin
+          Result := FItems[AKey].Peer.HashCode = APeer.HashCode
+        end
+      )
+    ) <= MaxPeerBlocksCount
+  );
 end;
 
 procedure TSeeding.TDownloadPieceQueue.Timeout;
 var
-  i: Integer;
+  keys: TArray<TDownloadKey>;
+  key: TDownloadKey;
   t: TDateTime;
 begin
   t := Now;
 
-  for i in FItems.Keys do
-    if SecondsBetween(t, FItems[i].TimeStamp) > MaxPieceQueueTimeout then
+  keys := FItems.Keys.ToArray;
+
+  for key in keys do
+    if SecondsBetween(t, FItems[key].TimeStamp) > MaxPieceQueueTimeout then
     try
       if Assigned(FOnTimeout) then
-        FOnTimeout(i, FItems[i].Peer);
+        FOnTimeout(key[dkiPiece], key[dkiOffset], FItems[key].Peer);
     finally
-      FBitField[i] := False;
-      FItems.Remove(i);
+      FItems.Remove(key);
     end;
-end;
-
-procedure TSeeding.TDownloadPieceQueue.Touch(APiece: Integer);
-begin
-  if FItems.ContainsKey(APiece) then
-    with FItems[APiece] do
-      FItems.AddOrSetValue(APiece, TDownloadPieceQueueItem.Create(Peer));
 end;
 
 { TSeeding.TDownloadPieceQueue.TDownloadPieceQueue }

@@ -688,15 +688,17 @@ begin
 
     FSeeding.OnUpdate := procedure (ASeeding: ISeeding)
     var
-      s: Single;
+      s1, s2: Single;
     begin
       if Assigned(FileItem) and (SecondsBetween(Now, FLaslUpdate) >= 3) then
       begin
-        s := FileItem.PercentComplete;
+        s1 := FileItem.PercentComplete;
+        s2 := ASeeding.PercentComplete;
 
         TThread.Synchronize(nil, procedure
         begin
-          pbLoadingState.Value := s;
+          pbLoadingState.Value := s1;
+          labelFileName.Text := Format('%s (%f/%f)', [ExtractFileName(FileItem.Path), s1, s2]);
         end);
 
         FLaslUpdate := Now;

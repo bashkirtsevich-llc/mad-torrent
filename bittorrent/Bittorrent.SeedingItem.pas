@@ -3,7 +3,7 @@
 interface
 
 uses
-  System.Classes, System.SysUtils,
+  System.Classes, System.SysUtils, System.Math,
   Bittorrent, Bittorrent.Bitfield,
   IdGlobal;
 
@@ -79,7 +79,7 @@ begin
     procedure (ABitField: TBitField)
     begin
       with FFileItem do
-        reslt := ABitField.CheckedCountInRange(FirstPiece, LastPiece) / PiecesCount * 100;
+        reslt := Min(ABitField.CheckedCountInRange(FirstPiece, LastPiece) / PiecesCount * 100, 100);
     end);
 
   Result := reslt;
