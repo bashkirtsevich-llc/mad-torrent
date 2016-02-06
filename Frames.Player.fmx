@@ -53,10 +53,12 @@ object frmPlayer: TfrmPlayer
           TabOrder = 3
           object trckbrVolume: TTrackBar
             Align = VertCenter
+            CanParentFocus = True
             Cursor = crHandPoint
             Orientation = Horizontal
+            Position.Y = -5.000000000000000000
             Size.Width = 70.000000000000000000
-            Size.Height = 8.000000000000000000
+            Size.Height = 19.000000000000000000
             Size.PlatformDefault = False
             StyleLookup = 'shareman_trackbar'
             TabOrder = 0
@@ -108,12 +110,14 @@ object frmPlayer: TfrmPlayer
           end
           object trckbrPlayingState: TTrackBar
             Align = VertCenter
+            CanParentFocus = True
             ClipParent = True
             Cursor = crHandPoint
             Max = 1.000000000000000000
             Orientation = Horizontal
+            Position.Y = -5.000000000000000000
             Size.Width = 729.000000000000000000
-            Size.Height = 8.000000000000000000
+            Size.Height = 19.000000000000000000
             Size.PlatformDefault = False
             StyleLookup = 'shareman_trackbar'
             TabOrder = 0
