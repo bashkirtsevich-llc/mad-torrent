@@ -697,7 +697,7 @@ begin
 
         TThread.Synchronize(nil, procedure
         begin
-          pbLoadingState.Value := s1;
+          //pbLoadingState.Value := s1;
           labelFileName.Text := Format('%s (%f/%f)', [ExtractFileName(FileItem.Path), s1, s2]);
         end);
 
