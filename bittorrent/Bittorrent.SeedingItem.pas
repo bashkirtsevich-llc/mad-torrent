@@ -133,13 +133,17 @@ begin
         procedure (ABitField: TBitField)
         var
           i: Int64;
+          j: Integer;
         begin
           reslt := True;
           i     := 0;
 
           while reslt and (i < ALength) do
           begin
-            reslt := reslt and ABitField[FFileItem.FirstPiece + ((i + AOffset) div FPieceLength)];
+            j := FFileItem.FirstPiece + ((i + AOffset) div FPieceLength);
+
+            reslt := reslt and ABitField[j];
+
             Inc(i, FPieceLength);
           end;
         end);
