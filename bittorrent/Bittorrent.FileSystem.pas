@@ -14,11 +14,6 @@ type
   private
     const
       FileTTL       = 30; { секунд }
-      {$IFDEF PUBL_UTIL}
-      PieceTTL      = 1;  { секунд }
-      {$ELSE}
-      PieceTTL      = 10; { секунд }
-      {$ENDIF}
   private
     type
       TFilePoolPair = record
@@ -26,20 +21,11 @@ type
         LastRequest: TDateTime;
         constructor Create(AStream: TStream; ALastRequest: TDateTime);
       end;
-
-      TPiecePoolPair = record
-        Piece: IPiece;
-        LastRequest: TDateTime;
-        constructor Create(const APiece: IPiece; ALastRequest: TDateTime);
-      end;
   protected
     FMetaFile: IMetaFile; { метаинформация }
     FDownloadFolder: string;
   private
     FFileCache: TDictionary<string, TFilePoolPair>;
-    {$IFNDEF PUBL_UTIL}
-    FPieceCache: TDictionary<Integer, TPiecePoolPair>;
-    {$ENDIF}
     FLock: TObject;
     FOnChange: TProc<IFileSystem>;
   private
@@ -58,8 +44,7 @@ type
 
     function PieceCheck(APiece: IPiece): Boolean;
     procedure PieceWrite(APiece: IPiece);
-    function ReadPiece(APieceIndex: Integer): IPiece;
-    function GetPiece(APieceIndex: Integer): IPiece; inline;
+    function GetPiece(APieceIndex: Integer): IPiece;
 
     function OpenFile(AFileItem: IFileItem): TStream;
   public
@@ -76,7 +61,7 @@ uses
 
 procedure TFileSystem.ClearCaches(AFullClear: Boolean = False);
 var
-  i, j: Integer;
+  i: Integer;
   t: TDateTime;
   s: string;
 begin
@@ -95,17 +80,6 @@ begin
           FFileCache.Remove(s);
         end;
     end;
-
-    {$IFNDEF PUBL_UTIL}
-    for i := FPieceCache.Keys.Count - 1 downto 0 do
-    begin
-      j := FPieceCache.Keys.ToArray[i];
-
-      with FPieceCache[j] do
-        if AFullClear or (SecondsBetween(t, LastRequest) >= PieceTTL) then
-          FPieceCache.Remove(j);
-    end;
-    {$ENDIF}
   finally
     Unlock;
   end;
@@ -116,11 +90,7 @@ constructor TFileSystem.Create(AMetaFile: IMetaFile;
 begin
   FMetaFile := AMetaFile;
   FDownloadFolder := ADownloadFolder;
-
   FFileCache := TDictionary<string, TFilePoolPair>.Create;
-  {$IFNDEF PUBL_UTIL}
-  FPieceCache := TDictionary<Integer, TPiecePoolPair>.Create;
-  {$ENDIF}
   FLock := TObject.Create;
 end;
 
@@ -146,9 +116,6 @@ begin
   // удаляем всё из пула
   ClearCaches(True);
 
-  {$IFNDEF PUBL_UTIL}
-  FPieceCache.Free;
-  {$ENDIF}
   FFileCache.Free;
   FLock.Free;
   inherited;
@@ -166,28 +133,41 @@ end;
 
 function TFileSystem.GetPiece(APieceIndex: Integer): IPiece;
 var
-  it: TPiecePoolPair;
+  fi: IFileItem;
+  first: Boolean;
+  offset: UInt64;
+  got: Integer;
+  buf: TUniString;
 begin
   Lock;
   try
-    {$IFNDEF PUBL_UTIL}
-    if FPieceCache.ContainsKey(APieceIndex) then
+    { абсолютное смещение куска }
+    got := 0;
+    buf.Len := FMetaFile.PieceLength[APieceIndex];
+
+    offset := FMetaFile.PieceOffset[APieceIndex];
+
+    first := True;
+    for fi in FMetaFile.FilesByPiece[APieceIndex] do
     begin
-      it := FPieceCache[APieceIndex];
-      it.LastRequest := Now;
+      with OpenFile(fi) do
+      begin
+        { переход на смещение, соответствующее индексу куска }
+        if first then
+          Position := offset - fi.FileOffset
+        else
+          Position := 0;
 
-      FPieceCache.AddOrSetValue(APieceIndex, it);
+        { чтение }
+        got := got + Read(buf.DataPtr[got]^, buf.Len - got);
+      end;
 
-      Exit(it.Piece);
+      first := False;
     end;
-    {$ENDIF}
 
-    Result := ReadPiece(APieceIndex);
+    Assert(buf.Len = got, 'Unexpected buffer size');
 
-    {$IFNDEF PUBL_UTIL}
-    if Assigned(Result) then
-      FPieceCache.Add(APieceIndex, TPiecePoolPair.Create(Result, Now));
-    {$ENDIF}
+    Result := TPiece.Create(APieceIndex, buf.Len, 0, buf);
   finally
     Unlock;
   end;
@@ -236,7 +216,7 @@ begin
 
         for i := j to k do
         begin
-          p := ReadPiece(i);
+          p := GetPiece(i);
           Result[i] := Assigned(p) and PieceCheck(p);
         end;
       end;
@@ -339,48 +319,6 @@ begin
     raise EFileSystemCheckException.CreateFmt('Piece %d corrupted', [APiece.Index]);
 end;
 
-function TFileSystem.ReadPiece(APieceIndex: Integer): IPiece;
-var
-  fi: IFileItem;
-  first: Boolean;
-  offset: UInt64;
-  got: Integer;
-  buf: TUniString;
-begin
-  Lock;
-  try
-    { абсолютное смещение куска }
-    got := 0;
-    buf.Len := FMetaFile.PieceLength[APieceIndex];
-
-    offset := FMetaFile.PieceOffset[APieceIndex];
-
-    first := True;
-    for fi in FMetaFile.FilesByPiece[APieceIndex] do
-    begin
-      with OpenFile(fi) do
-      begin
-        { переход на смещение, соответствующее индексу куска }
-        if first then
-          Position := offset - fi.FileOffset
-        else
-          Position := 0;
-
-        { чтение }
-        got := got + Read(buf.DataPtr[got]^, buf.Len - got);
-      end;
-
-      first := False;
-    end;
-
-    Assert(buf.Len = got, 'Unexpected buffer size');
-
-    Result := TPiece.Create(APieceIndex, buf.Len, 0, buf);
-  finally
-    Unlock;
-  end;
-end;
-
 procedure TFileSystem.Lock;
 begin
   System.TMonitor.Enter(FLock);
@@ -407,15 +345,6 @@ constructor TFileSystem.TFilePoolPair.Create(AStream: TStream;
   ALastRequest: TDateTime);
 begin
   Stream := AStream;
-  LastRequest := ALastRequest;
-end;
-
-{ TFileSystem.TPiecePoolPair }
-
-constructor TFileSystem.TPiecePoolPair.Create(const APiece: IPiece;
-  ALastRequest: TDateTime);
-begin
-  Piece := APiece;
   LastRequest := ALastRequest;
 end;
 
