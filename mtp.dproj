@@ -90,54 +90,6 @@
         <DCCReference Include="Forms.Main.pas">
             <Form>frmMain</Form>
         </DCCReference>
-        <DCCReference Include="basic\Basic.Bencoding.pas"/>
-        <DCCReference Include="basic\Basic.BigInteger.pas"/>
-        <DCCReference Include="basic\Basic.UniString.pas"/>
-        <DCCReference Include="common\Common.AccurateTimer.pas"/>
-        <DCCReference Include="common\Common.BusyObj.pas"/>
-        <DCCReference Include="common\Common.InterfacedObjHolder.pas"/>
-        <DCCReference Include="common\Common.Prelude.pas"/>
-        <DCCReference Include="common\Common.SHA1.pas"/>
-        <DCCReference Include="common\Common.SortedList.pas"/>
-        <DCCReference Include="common\Common.StringHelper.pas"/>
-        <DCCReference Include="common\Common.ThreadPool.pas"/>
-        <DCCReference Include="dht\DHT.pas"/>
-        <DCCReference Include="dht\DHT.Bucket.pas"/>
-        <DCCReference Include="dht\DHT.Common.pas"/>
-        <DCCReference Include="dht\DHT.Engine.pas"/>
-        <DCCReference Include="dht\DHT.Listener.pas"/>
-        <DCCReference Include="dht\DHT.Messages.pas"/>
-        <DCCReference Include="dht\DHT.Messages.MessageLoop.pas"/>
-        <DCCReference Include="dht\DHT.Node.pas"/>
-        <DCCReference Include="dht\DHT.NodeID.pas"/>
-        <DCCReference Include="dht\DHT.Peer.pas"/>
-        <DCCReference Include="dht\DHT.RoutingTable.pas"/>
-        <DCCReference Include="dht\DHT.Tasks.pas"/>
-        <DCCReference Include="dht\DHT.Tasks.Events.pas"/>
-        <DCCReference Include="dht\DHT.TokenManager.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.Bitfield.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.Connection.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.Counter.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.FileItem.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.FileSystem.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.Messages.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.MetaFile.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.Peer.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.Piece.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.PiecePicker.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.Seeding.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.SeedingItem.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.Server.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.Tracker.pas"/>
-        <DCCReference Include="indy\IdIOHandlerHelper.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.Extensions.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.Tracker.HTTP.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.Tracker.DHT.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.MagnetLink.pas"/>
-        <DCCReference Include="bittorrent\Bittorrent.Tracker.UDP.pas"/>
-        <DCCReference Include="udp\UDP.Server.pas"/>
-        <DCCReference Include="udp\UDP.Client.pas"/>
         <DCCReference Include="Frames.Overlay.pas">
             <Form>frmOverlay</Form>
             <DesignClass>TFrame</DesignClass>
@@ -148,6 +100,54 @@
         </DCCReference>
         <DCCReference Include="vlc\VLC.Player.pas"/>
         <DCCReference Include="vlc\PasLibVlcUnit.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\basic\Basic.Bencoding.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\basic\Basic.BigInteger.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\basic\Basic.UniString.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.Bitfield.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.Connection.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.Counter.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.Extensions.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.FileItem.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.FileSystem.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.MagnetLink.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.Messages.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.MetaFile.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.Peer.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.Piece.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.PiecePicker.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.Seeding.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.SeedingItem.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.Server.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.Tracker.DHT.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.Tracker.HTTP.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.Tracker.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\bittorrent\Bittorrent.Tracker.UDP.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\common\Common.AccurateTimer.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\common\Common.BusyObj.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\common\Common.InterfacedObjHolder.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\common\Common.Prelude.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\common\Common.SHA1.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\common\Common.SortedList.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\common\Common.StringHelper.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\common\Common.ThreadPool.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\dht\DHT.Bucket.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\dht\DHT.Common.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\dht\DHT.Engine.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\dht\DHT.Listener.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\dht\DHT.Messages.MessageLoop.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\dht\DHT.Messages.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\dht\DHT.Node.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\dht\DHT.NodeID.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\dht\DHT.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\dht\DHT.Peer.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\dht\DHT.RoutingTable.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\dht\DHT.Tasks.Events.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\dht\DHT.Tasks.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\dht\DHT.TokenManager.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\indy\IdIOHandlerHelper.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\udp\UDP.Client.pas"/>
+        <DCCReference Include="lib\libmadtorrent\src\udp\UDP.Server.pas"/>
         <BuildConfiguration Include="Release">
             <Key>Cfg_2</Key>
             <CfgParent>Base</CfgParent>
@@ -196,12 +196,27 @@
                         <Overwrite>true</Overwrite>
                     </Platform>
                 </DeployFile>
-                <DeployClass Name="ProjectiOSDeviceResourceRules">
+                <DeployClass Name="DependencyModule">
+                    <Platform Name="Win32">
+                        <Operation>0</Operation>
+                        <Extensions>.dll;.bpl</Extensions>
+                    </Platform>
                     <Platform Name="iOSDevice64">
                         <Operation>1</Operation>
+                        <Extensions>.dylib</Extensions>
+                    </Platform>
+                    <Platform Name="OSX32">
+                        <RemoteDir>Contents\MacOS</RemoteDir>
+                        <Operation>1</Operation>
+                        <Extensions>.dylib</Extensions>
                     </Platform>
                     <Platform Name="iOSDevice32">
                         <Operation>1</Operation>
+                        <Extensions>.dylib</Extensions>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                        <Extensions>.dylib</Extensions>
                     </Platform>
                 </DeployClass>
                 <DeployClass Name="ProjectOSXResource">
@@ -555,27 +570,12 @@
                         <Operation>1</Operation>
                     </Platform>
                 </DeployClass>
-                <DeployClass Name="DependencyModule">
-                    <Platform Name="Win32">
-                        <Operation>0</Operation>
-                        <Extensions>.dll;.bpl</Extensions>
-                    </Platform>
+                <DeployClass Name="ProjectiOSDeviceResourceRules">
                     <Platform Name="iOSDevice64">
                         <Operation>1</Operation>
-                        <Extensions>.dylib</Extensions>
-                    </Platform>
-                    <Platform Name="OSX32">
-                        <RemoteDir>Contents\MacOS</RemoteDir>
-                        <Operation>1</Operation>
-                        <Extensions>.dylib</Extensions>
                     </Platform>
                     <Platform Name="iOSDevice32">
                         <Operation>1</Operation>
-                        <Extensions>.dylib</Extensions>
-                    </Platform>
-                    <Platform Name="iOSSimulator">
-                        <Operation>1</Operation>
-                        <Extensions>.dylib</Extensions>
                     </Platform>
                 </DeployClass>
                 <ProjectRoot Platform="Win64" Name="$(PROJECTNAME)"/>
